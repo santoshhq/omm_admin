@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'modules.dart';
+import '../../config/api_config.dart';
+import '../../services/admin_session_service.dart';
 
 class AddEventPage extends StatefulWidget {
   final Festival? existingEvent;
@@ -23,6 +27,226 @@ class _AddEventPageState extends State<AddEventPage> {
 
   File? _eventImage;
   final List<TextEditingController> _detailControllers = [];
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeForm();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _targetController.dispose();
+    for (final c in _detailControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _initializeForm() {
+    if (widget.existingEvent != null) {
+      final event = widget.existingEvent!;
+      _titleController.text = event.name;
+      _descriptionController.text = event.description;
+      _targetController.text = event.targetAmount.toString();
+      _startDate = event.startDate;
+      _endDate = event.endDate;
+
+      // Initialize event details
+      for (final detail in event.eventDetails) {
+        final controller = TextEditingController(text: detail);
+        _detailControllers.add(controller);
+      }
+
+      // Add empty controller if no details exist
+      if (_detailControllers.isEmpty) {
+        _detailControllers.add(TextEditingController());
+      }
+    } else {
+      // Add one empty detail field for new events
+      _detailControllers.add(TextEditingController());
+    }
+  }
+
+  Future<String?> _getAdminId() async {
+    // Try AdminSessionService first (preferred method)
+    String? adminId = await AdminSessionService.getAdminId();
+    print('🔍 AdminSessionService admin ID: $adminId');
+
+    // If not found, try alternative keys for backward compatibility
+    if (adminId == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        adminId = prefs.getString('user_id') ?? prefs.getString('adminId');
+        print('🔍 Fallback admin ID from SharedPreferences: $adminId');
+      } catch (e) {
+        print('❌ Error getting fallback admin ID: $e');
+      }
+    }
+
+    final isLoggedIn = await AdminSessionService.isLoggedIn();
+    print('🔍 Final admin ID for event creation: $adminId');
+    print('🔍 Is logged in: $isLoggedIn');
+
+    return adminId;
+  }
+
+  Future<void> _saveEvent() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Validate dates
+    if (_startDate == null || _endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select both start and end dates'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_endDate!.isBefore(_startDate!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('End date must be after start date'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final adminId = await _getAdminId();
+    if (adminId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin session expired. Please login again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      // Get event details from controllers
+      final eventDetails = _detailControllers
+          .map((controller) => controller.text.trim())
+          .where((detail) => detail.isNotEmpty)
+          .toList();
+
+      if (widget.existingEvent != null) {
+        // Update existing event
+        final imageBase64 = await _getImageAsBase64();
+        print(
+          '🔄 Updating event with image data: ${imageBase64?.substring(0, 50) ?? "null"}...',
+        );
+
+        // Ensure we never send a local file path
+        String? imageToSend;
+        if (imageBase64 != null && imageBase64.startsWith('data:image/')) {
+          imageToSend = imageBase64;
+          print('✅ Sending base64 image data');
+        } else {
+          imageToSend = null;
+          print('⚠️ No valid image data, sending null');
+        }
+
+        final response = await ApiService.updateEventCard(
+          id: widget.existingEvent!.id!,
+          adminId: adminId,
+          image: imageToSend,
+          name: _titleController.text.trim(),
+          startdate: _startDate!.toUtc().toIso8601String(),
+          enddate: _endDate!.toUtc().toIso8601String(),
+          description: _descriptionController.text.trim(),
+          targetamount: double.parse(_targetController.text),
+          eventdetails: eventDetails,
+        );
+
+        final updatedFestival = Festival.fromJson(response['data']['event']);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Event updated successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, updatedFestival);
+        }
+      } else {
+        // Create new event
+        String? imageToSend;
+
+        // TEMPORARY FIX: Skip image processing to avoid backend HTML error
+        if (_eventImage != null) {
+          print(
+            '🖼️ Image selected but temporarily skipping to avoid backend errors',
+          );
+          print('Event will be created without image until backend is fixed');
+
+          // Show user notification about image issue
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Note: Event will be created without image. Backend needs to be updated to handle images properly.',
+                ),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+
+        final response = await ApiService.createEventCard(
+          image: imageToSend,
+          name: _titleController.text.trim(),
+          startdate: _startDate!.toUtc().toIso8601String(),
+          enddate: _endDate!.toUtc().toIso8601String(),
+          description: _descriptionController.text.trim(),
+          targetamount: double.parse(_targetController.text),
+          eventdetails: eventDetails,
+          adminId: adminId,
+        );
+
+        final newFestival = Festival.fromJson(response['data']);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Event created successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, newFestival);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save event: ${e.toString().replaceAll('Exception: ', '')}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -31,6 +255,32 @@ class _AddEventPageState extends State<AddEventPage> {
       setState(() {
         _eventImage = File(pickedFile.path);
       });
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _eventImage = null;
+    });
+  }
+
+  Future<String?> _getImageAsBase64() async {
+    if (_eventImage == null) {
+      print('🖼️ No image selected, returning null');
+      return null;
+    }
+
+    try {
+      print('🖼️ Converting image to base64: ${_eventImage!.path}');
+      final bytes = await _eventImage!.readAsBytes();
+      final base64String = base64Encode(bytes);
+      final extension = _eventImage!.path.split('.').last.toLowerCase();
+      final result = 'data:image/$extension;base64,$base64String';
+      print('🖼️ Base64 conversion successful, length: ${result.length}');
+      return result;
+    } catch (e) {
+      print('❌ Error converting image to base64: $e');
+      return null;
     }
   }
 
@@ -58,7 +308,7 @@ class _AddEventPageState extends State<AddEventPage> {
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            "Add Event",
+            widget.existingEvent != null ? "Edit Event" : "Add Event",
             style: TextStyle(
               fontWeight: FontWeight.w500,
               fontSize: 18,
@@ -106,15 +356,19 @@ class _AddEventPageState extends State<AddEventPage> {
                                 )
                               : null,
                         ),
-                        // Upload button inside avatar
+                        // Upload/Remove button inside avatar
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: InkWell(
-                            onTap: _pickImage,
+                            onTap: _eventImage == null
+                                ? _pickImage
+                                : _removeImage,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: themeColor,
+                                color: _eventImage == null
+                                    ? themeColor
+                                    : Colors.red,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: Colors.white,
@@ -122,8 +376,10 @@ class _AddEventPageState extends State<AddEventPage> {
                                 ),
                               ),
                               padding: const EdgeInsets.all(6),
-                              child: const Icon(
-                                Icons.upload,
+                              child: Icon(
+                                _eventImage == null
+                                    ? Icons.upload
+                                    : Icons.close,
                                 color: Colors.white,
                                 size: 18,
                               ),
@@ -326,7 +582,6 @@ class _AddEventPageState extends State<AddEventPage> {
                 const SizedBox(height: 24),
 
                 // Event Details Section
-                // Event Details Section
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -401,22 +656,7 @@ class _AddEventPageState extends State<AddEventPage> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        Festival newEvent = Festival(
-                          name: _titleController.text,
-                          description: _descriptionController.text,
-                          targetAmount: double.parse(_targetController.text),
-                          collectedAmount: 0,
-                          donations: [],
-                          imageUrl: _eventImage?.path,
-                          startDate: _startDate,
-                          endDate: _endDate,
-                        );
-
-                        Navigator.pop(context, newEvent);
-                      }
-                    },
+                    onPressed: _isSubmitting ? null : _saveEvent,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       backgroundColor: themeColor,
@@ -429,10 +669,26 @@ class _AddEventPageState extends State<AddEventPage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.save, size: 22, color: Colors.white),
+                        if (_isSubmitting)
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        else
+                          const Icon(Icons.save, size: 22, color: Colors.white),
                         const SizedBox(width: 8),
                         Text(
-                          "Add Event",
+                          _isSubmitting
+                              ? "Saving..."
+                              : widget.existingEvent != null
+                              ? "Update Event"
+                              : "Add Event",
                           style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,

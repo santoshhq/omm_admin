@@ -68,34 +68,29 @@ class AdminSessionService {
   static Future<bool> isLoggedIn() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
-      final adminId = prefs.getString(_adminIdKey);
-
-      // Valid session requires both login flag and admin ID
-      return isLoggedIn && adminId != null && adminId.isNotEmpty;
+      return prefs.getBool(_isLoggedInKey) ?? false;
     } catch (e) {
       print('❌ Error checking login status: $e');
       return false;
     }
   }
 
-  /// Get complete admin session info
-  static Future<Map<String, dynamic>?> getAdminSession() async {
+  /// Check if admin session has expired (optional - based on time)
+  static Future<bool> isSessionExpired({int maxHours = 24}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
+      final loginTimeStr = prefs.getString(_loginTimeKey);
 
-      if (!isLoggedIn) return null;
+      if (loginTimeStr == null) return true;
 
-      return {
-        'adminId': prefs.getString(_adminIdKey),
-        'adminEmail': prefs.getString(_adminEmailKey),
-        'isLoggedIn': isLoggedIn,
-        'loginTime': prefs.getString(_loginTimeKey),
-      };
+      final loginTime = DateTime.parse(loginTimeStr);
+      final now = DateTime.now();
+      final difference = now.difference(loginTime);
+
+      return difference.inHours > maxHours;
     } catch (e) {
-      print('❌ Error getting admin session: $e');
-      return null;
+      print('❌ Error checking session expiry: $e');
+      return true; // Assume expired on error
     }
   }
 
@@ -117,15 +112,33 @@ class AdminSessionService {
     }
   }
 
-  /// Update admin session (if admin profile changes)
-  static Future<bool> updateAdminSession({String? adminEmail}) async {
+  /// Get admin session info for debugging
+  static Future<Map<String, dynamic>> getSessionInfo() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
 
-      if (!isLoggedIn) {
-        print('❌ Cannot update session - admin not logged in');
-        return false;
+      return {
+        'adminId': prefs.getString(_adminIdKey),
+        'adminEmail': prefs.getString(_adminEmailKey),
+        'isLoggedIn': prefs.getBool(_isLoggedInKey) ?? false,
+        'loginTime': prefs.getString(_loginTimeKey),
+      };
+    } catch (e) {
+      print('❌ Error getting session info: $e');
+      return {};
+    }
+  }
+
+  /// Update admin session without changing login status
+  static Future<bool> updateAdminSession({
+    String? adminId,
+    String? adminEmail,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (adminId != null) {
+        await prefs.setString(_adminIdKey, adminId);
       }
 
       if (adminEmail != null) {
@@ -137,25 +150,6 @@ class AdminSessionService {
     } catch (e) {
       print('❌ Error updating admin session: $e');
       return false;
-    }
-  }
-
-  /// Check if session is expired (optional - for security)
-  static Future<bool> isSessionExpired({int maxHours = 24}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final loginTimeStr = prefs.getString(_loginTimeKey);
-
-      if (loginTimeStr == null) return true;
-
-      final loginTime = DateTime.parse(loginTimeStr);
-      final now = DateTime.now();
-      final difference = now.difference(loginTime);
-
-      return difference.inHours > maxHours;
-    } catch (e) {
-      print('❌ Error checking session expiry: $e');
-      return true; // Assume expired on error
     }
   }
 }

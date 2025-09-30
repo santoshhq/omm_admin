@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 //import 'package:omm_admin/Amenities_booking/amenities_admin_widget.dart';
 import 'package:omm_admin/Amenities_booking/booking_amenitis.dart';
 
-import 'package:omm_admin/Events_Announ/events/add_event.dart';
-
 import 'package:omm_admin/bills_managements/bill_page.dart';
 // import 'package:omm_admin/bills_managements/bll_card.dart'; // not used here
 import 'package:omm_admin/complaints/complaint_widget.dart';
@@ -122,14 +120,6 @@ class _DashboardPageState extends State<DashboardPage> {
         });
       }
     }
-  }
-
-  void _addEvent() async {
-    // We don't use the return value right now; keep call for future use
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddEventPage()),
-    );
   }
 
   @override

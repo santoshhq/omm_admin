@@ -15,7 +15,6 @@ class MemberDetailsWidget extends StatefulWidget {
 
 class _MemberDetailsWidgetState extends State<MemberDetailsWidget> {
   late MemberRegistrationModel _member;
-  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -25,10 +24,6 @@ class _MemberDetailsWidgetState extends State<MemberDetailsWidget> {
 
   Future<void> _refreshMemberData() async {
     if (!mounted) return;
-
-    setState(() {
-      _isRefreshing = true;
-    });
 
     try {
       final adminId = await AdminSessionService.getAdminId();
@@ -75,11 +70,7 @@ class _MemberDetailsWidgetState extends State<MemberDetailsWidget> {
     } catch (e) {
       debugPrint('Error refreshing member data: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
+      // Refresh completed
     }
   }
 

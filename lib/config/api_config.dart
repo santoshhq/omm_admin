@@ -60,6 +60,20 @@ class ApiService {
     }
   }
 
+  // Dynamic base URL for events based on platform
+  static String get eventsBaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/events";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/events";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/events";
+    }
+  }
+
   /// Signup
   static Future<Map<String, dynamic>> signup(
     String email,
@@ -1172,6 +1186,396 @@ class ApiService {
         );
       }
       throw Exception("Failed to toggle amenity status: $e");
+    }
+  }
+
+  // ==================== EVENT CARD API METHODS ====================
+
+  /// Create Event Card
+  static Future<Map<String, dynamic>> createEventCard({
+    String? image,
+    required String name,
+    required String startdate,
+    required String enddate,
+    required String description,
+    required double targetamount,
+    List<String>? eventdetails,
+    required String adminId,
+  }) async {
+    try {
+      print("🚀 Creating event card...");
+      print("📅 Event: $name");
+      print("🖼️ Image data length: ${image?.length ?? 0} characters");
+      print("🌐 URL: $eventsBaseUrl");
+
+      final url = Uri.parse(eventsBaseUrl);
+
+      // Convert single image to array format that backend expects
+      List<String>? images;
+      if (image != null && image.isNotEmpty) {
+        images = [image];
+        print("✅ Converted single image to array format");
+      }
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "images": images, // Changed from "image" to "images" to match backend
+          "name": name,
+          "startdate": startdate,
+          "enddate": enddate,
+          "description": description,
+          "targetamount": targetamount,
+          "eventdetails": eventdetails ?? [],
+          "adminId": adminId,
+        }),
+      );
+
+      print("📱 Create Event Response Status: ${response.statusCode}");
+      print("📱 Create Event Response Body: ${response.body}");
+
+      // Check if response is HTML (error page) instead of JSON
+      if (response.statusCode == 404) {
+        print("❌ Create event API endpoint not found (404)");
+        throw Exception(
+          "Events API endpoint not found. Please check your backend server routes.",
+        );
+      }
+
+      if (response.statusCode >= 500) {
+        print("❌ Server error (${response.statusCode})");
+        if (response.body.contains('<!DOCTYPE html>') ||
+            response.body.contains('<html>')) {
+          throw Exception(
+            "Server error occurred while processing the image. Please check your backend server logs.",
+          );
+        }
+      }
+
+      // Try to parse JSON, handle non-JSON responses gracefully
+      late Map<String, dynamic> body;
+      try {
+        body = jsonDecode(response.body);
+      } catch (e) {
+        print("❌ Invalid JSON response from server");
+        final maxLength = response.body.length > 200
+            ? 200
+            : response.body.length;
+        print("🔥 Response was: ${response.body.substring(0, maxLength)}...");
+        if (response.body.contains('<!DOCTYPE html>') ||
+            response.body.contains('<html>')) {
+          throw Exception(
+            "Server returned HTML error page instead of JSON. This usually means there's an error processing the image data on the backend.",
+          );
+        }
+        final previewLength = response.body.length > 100
+            ? 100
+            : response.body.length;
+        throw Exception(
+          "Server returned invalid response. Expected JSON but got: ${response.body.substring(0, previewLength)}",
+        );
+      }
+
+      if (response.statusCode == 201 && body["success"] == true) {
+        print("✅ Event card created successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Create event failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to create event card");
+      }
+    } catch (e) {
+      print("🔥 Error creating event card: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to create event card: $e");
+    }
+  }
+
+  /// Get All Event Cards
+  static Future<Map<String, dynamic>> getAllEventCards() async {
+    try {
+      print("🚀 Fetching all event cards...");
+      print("🌐 URL: $eventsBaseUrl");
+
+      final url = Uri.parse(eventsBaseUrl);
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      print("📱 Get All Events Response Status: ${response.statusCode}");
+      print("📱 Get All Events Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Event cards fetched successfully!");
+        return {
+          "success": true,
+          "message": "Event cards fetched successfully",
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Fetch events failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch event cards");
+      }
+    } catch (e) {
+      print("🔥 Error fetching event cards: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch event cards: $e");
+    }
+  }
+
+  /// Get Event Card by ID
+  static Future<Map<String, dynamic>> getEventCardById(String id) async {
+    try {
+      print("🚀 Fetching event card by ID...");
+      print("🆔 Event ID: $id");
+      print("🌐 URL: $eventsBaseUrl/$id");
+
+      final url = Uri.parse("$eventsBaseUrl/$id");
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      print("📱 Get Event Response Status: ${response.statusCode}");
+      print("📱 Get Event Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Event card fetched successfully!");
+        return {
+          "success": true,
+          "message": "Event card fetched successfully",
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Fetch event failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch event card");
+      }
+    } catch (e) {
+      print("🔥 Error fetching event card: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch event card: $e");
+    }
+  }
+
+  /// Update Event Card
+  static Future<Map<String, dynamic>> updateEventCard({
+    required String id,
+    required String adminId,
+    String? image,
+    String? name,
+    String? startdate,
+    String? enddate,
+    String? description,
+    double? targetamount,
+    List<String>? eventdetails,
+    bool? status,
+  }) async {
+    try {
+      print("🚀 Updating event card...");
+      print("🆔 Event ID: $id");
+      print("👤 Admin ID: $adminId");
+      print("🌐 URL: $eventsBaseUrl/$id");
+
+      final Map<String, dynamic> updateData = {"adminId": adminId};
+
+      if (image != null) updateData["image"] = image;
+      if (name != null) updateData["name"] = name;
+      if (startdate != null) updateData["startdate"] = startdate;
+      if (enddate != null) updateData["enddate"] = enddate;
+      if (description != null) updateData["description"] = description;
+      if (targetamount != null) updateData["targetamount"] = targetamount;
+      if (eventdetails != null) updateData["eventdetails"] = eventdetails;
+      if (status != null) updateData["status"] = status;
+
+      final url = Uri.parse("$eventsBaseUrl/$id");
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(updateData),
+      );
+
+      print("📱 Update Event Response Status: ${response.statusCode}");
+      print("📱 Update Event Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Event card updated successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Update event failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to update event card");
+      }
+    } catch (e) {
+      print("🔥 Error updating event card: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to update event card: $e");
+    }
+  }
+
+  /// Delete Event Card
+  static Future<Map<String, dynamic>> deleteEventCard(String id) async {
+    try {
+      print("🚀 Deleting event card...");
+      print("🆔 Event ID: $id");
+      print("🌐 URL: $eventsBaseUrl/$id");
+
+      final url = Uri.parse("$eventsBaseUrl/$id");
+      final response = await http.delete(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      print("📱 Delete Event Response Status: ${response.statusCode}");
+      print("📱 Delete Event Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Event card deleted successfully!");
+        return {"success": true, "message": body["message"]};
+      } else {
+        print("❌ Delete event failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to delete event card");
+      }
+    } catch (e) {
+      print("🔥 Error deleting event card: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to delete event card: $e");
+    }
+  }
+
+  /// Add Event Donation
+  static Future<Map<String, dynamic>> addEventDonation({
+    required String eventId,
+    required String userId,
+    required double amount,
+  }) async {
+    try {
+      print("🚀 Adding event donation...");
+      print("🆔 Event ID: $eventId");
+      print("👤 User ID: $userId");
+      print("💰 Amount: $amount");
+      print("🌐 URL: $eventsBaseUrl/$eventId/donate");
+
+      final url = Uri.parse("$eventsBaseUrl/$eventId/donate");
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"userId": userId, "amount": amount}),
+      );
+
+      print("📱 Add Donation Response Status: ${response.statusCode}");
+      print("📱 Add Donation Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Donation added successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Add donation failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to add donation");
+      }
+    } catch (e) {
+      print("🔥 Error adding donation: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to add donation: $e");
+    }
+  }
+
+  /// Toggle Event Status
+  static Future<Map<String, dynamic>> toggleEventStatus(String id) async {
+    try {
+      print("🚀 Toggling event status...");
+      print("🆔 Event ID: $id");
+      print("🌐 URL: $eventsBaseUrl/$id/toggle");
+
+      final url = Uri.parse("$eventsBaseUrl/$id/toggle");
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+      );
+
+      print("📱 Toggle Event Status Response Status: ${response.statusCode}");
+      print("📱 Toggle Event Status Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Event status toggled successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "status": body["status"],
+        };
+      } else {
+        print("❌ Toggle event status failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to toggle event status");
+      }
+    } catch (e) {
+      print("🔥 Error toggling event status: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to toggle event status: $e");
     }
   }
 }
