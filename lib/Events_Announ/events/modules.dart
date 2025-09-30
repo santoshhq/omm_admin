@@ -21,6 +21,8 @@ class Festival {
   final String? imageUrl;
   final DateTime? startDate; // 👈 add this
   DateTime? endDate;
+  bool isActive;
+  final List<String> eventDetails; // 👈 List of event details
   Festival({
     required this.name,
     required this.description,
@@ -30,5 +32,8 @@ class Festival {
     this.imageUrl,
     this.startDate,
     this.endDate, // 👈 add this
+    this.isActive = true,
+    this.eventDetails =
+        const [], // 👈 List of event details with default empty list
   });
 }

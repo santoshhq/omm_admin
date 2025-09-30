@@ -23,7 +23,6 @@ class _AddEventPageState extends State<AddEventPage> {
 
   File? _eventImage;
   final List<TextEditingController> _detailControllers = [];
-  DateTime? _selectedDate; // for storing picked date
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -41,37 +40,11 @@ class _AddEventPageState extends State<AddEventPage> {
     });
   }
 
-  Future<void> _pickDate() async {
-    DateTime now = DateTime.now();
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.teal,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
+  // _selectedDate and _pickDate removed - not used in current UI
 
   @override
   Widget build(BuildContext context) {
-    final themeColor = Colors.teal;
+    final themeColor = Colors.deepOrange;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
@@ -79,17 +52,17 @@ class _AddEventPageState extends State<AddEventPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.teal),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
         title: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            "Add New Event",
-            style: GoogleFonts.poppins(
+            "Add Event",
+            style: TextStyle(
               fontWeight: FontWeight.w500,
               fontSize: 18,
-              color: themeColor,
+              color: Colors.black,
             ),
           ),
         ),
@@ -129,7 +102,7 @@ class _AddEventPageState extends State<AddEventPage> {
                               ? const Icon(
                                   Icons.celebration,
                                   size: 40,
-                                  color: Colors.teal,
+                                  color: Colors.deepOrange,
                                 )
                               : null,
                         ),
@@ -168,7 +141,7 @@ class _AddEventPageState extends State<AddEventPage> {
                           labelText: "Event Title",
                           prefixIcon: const Icon(
                             Icons.star_border,
-                            color: Colors.teal,
+                            color: Colors.deepOrange,
                           ),
                           labelStyle: GoogleFonts.poppins(),
                           border: OutlineInputBorder(
@@ -190,21 +163,24 @@ class _AddEventPageState extends State<AddEventPage> {
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
-                      initialDate: _startDate ?? DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
+                      initialDate:
+                          _startDate ?? DateTime.now(), // default selected date
+                      firstDate: DateTime.now(), // ✅ disables all past days
+                      lastDate: DateTime(2100), // future limit
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
                             colorScheme: const ColorScheme.light(
-                              primary:
-                                  Colors.teal, // Header & selected date color
-                              onPrimary: Colors.white,
-                              onSurface: Colors.black,
+                              primary: Colors
+                                  .deepOrange, // header & selected date color
+                              onPrimary:
+                                  Colors.white, // text color on selected date
+                              onSurface: Colors.black, // default text color
                             ),
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
-                                foregroundColor: Colors.teal,
+                                foregroundColor:
+                                    Colors.deepOrange, // buttons (OK/CANCEL)
                               ),
                             ),
                           ),
@@ -212,14 +188,20 @@ class _AddEventPageState extends State<AddEventPage> {
                         );
                       },
                     );
-                    if (picked != null) setState(() => _startDate = picked);
+
+                    if (picked != null) {
+                      setState(() {
+                        _startDate = picked; // store the picked date
+                      });
+                    }
                   },
+
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: "Event Start Date",
                       prefixIcon: const Icon(
                         Icons.event_note,
-                        color: Colors.teal,
+                        color: Colors.deepOrange,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -232,7 +214,7 @@ class _AddEventPageState extends State<AddEventPage> {
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         color: _startDate == null
-                            ? Colors.grey
+                            ? const Color.fromARGB(255, 94, 94, 94)
                             : Colors.black87,
                       ),
                     ),
@@ -247,19 +229,22 @@ class _AddEventPageState extends State<AddEventPage> {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: _endDate ?? (_startDate ?? DateTime.now()),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
+                      firstDate: DateTime.now(), // ✅ disables past days
+                      lastDate: DateTime(2100), // allow far future
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
                             colorScheme: const ColorScheme.light(
-                              primary: Colors.teal,
-                              onPrimary: Colors.white,
-                              onSurface: Colors.black,
+                              primary:
+                                  Colors.deepOrange, // header & selected date
+                              onPrimary:
+                                  Colors.white, // text color on selected date
+                              onSurface: Colors.black, // default text color
                             ),
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
-                                foregroundColor: Colors.teal,
+                                foregroundColor:
+                                    Colors.deepOrange, // OK/CANCEL buttons
                               ),
                             ),
                           ),
@@ -267,14 +252,18 @@ class _AddEventPageState extends State<AddEventPage> {
                         );
                       },
                     );
-                    if (picked != null) setState(() => _endDate = picked);
+
+                    if (picked != null) {
+                      setState(() => _endDate = picked);
+                    }
                   },
+
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: "Event End Date",
                       prefixIcon: const Icon(
                         Icons.event_note,
-                        color: Colors.teal,
+                        color: Colors.deepOrange,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -286,7 +275,9 @@ class _AddEventPageState extends State<AddEventPage> {
                           : "${_endDate!.day}/${_endDate!.month}/${_endDate!.year}",
                       style: GoogleFonts.poppins(
                         fontSize: 16,
-                        color: _endDate == null ? Colors.grey : Colors.black87,
+                        color: _endDate == null
+                            ? const Color.fromARGB(255, 91, 90, 90)
+                            : Colors.black87,
                       ),
                     ),
                   ),
@@ -301,7 +292,7 @@ class _AddEventPageState extends State<AddEventPage> {
                     labelText: "Description",
                     prefixIcon: const Icon(
                       Icons.description,
-                      color: Colors.teal,
+                      color: Colors.deepOrange,
                     ),
                     alignLabelWithHint: true,
                     labelStyle: GoogleFonts.poppins(),
@@ -322,7 +313,7 @@ class _AddEventPageState extends State<AddEventPage> {
                     labelText: "Target Amount (₹)",
                     prefixIcon: const Icon(
                       Icons.currency_rupee,
-                      color: Colors.teal,
+                      color: Colors.deepOrange,
                     ),
                     labelStyle: GoogleFonts.poppins(),
                     border: OutlineInputBorder(
@@ -344,12 +335,15 @@ class _AddEventPageState extends State<AddEventPage> {
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.teal.shade700,
+                        color: Colors.deepOrange.shade700,
                       ),
                     ),
                     IconButton(
                       onPressed: _addDetailField,
-                      icon: const Icon(Icons.add_circle, color: Colors.teal),
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: Colors.deepOrange,
+                      ),
                     ),
                   ],
                 ),
@@ -372,7 +366,7 @@ class _AddEventPageState extends State<AddEventPage> {
                                 labelText: "Detail",
                                 prefixIcon: const Icon(
                                   Icons.label_important,
-                                  color: Colors.teal,
+                                  color: Colors.deepOrange,
                                 ),
                                 labelStyle: GoogleFonts.poppins(),
                                 border: OutlineInputBorder(
@@ -438,7 +432,7 @@ class _AddEventPageState extends State<AddEventPage> {
                         const Icon(Icons.save, size: 22, color: Colors.white),
                         const SizedBox(width: 8),
                         Text(
-                          "Save Event",
+                          "Add Event",
                           style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,

@@ -1,20 +1,24 @@
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'package:omm_admin/events/festival_widget.dart'; // For Ongoing Events
-import 'package:omm_admin/events/modules.dart'; // Keep other module imports as needed
+//import 'package:omm_admin/Amenities_booking/amenities_admin_widget.dart';
+import 'package:omm_admin/Amenities_booking/booking_amenitis.dart';
 
-// Additional pages for other boxes
-class ViewBillsPage extends StatelessWidget {
-  const ViewBillsPage({super.key});
+import 'package:omm_admin/Events_Announ/events/add_event.dart';
+
+import 'package:omm_admin/bills_managements/bill_page.dart';
+// import 'package:omm_admin/bills_managements/bll_card.dart'; // not used here
+import 'package:omm_admin/complaints/complaint_widget.dart';
+import 'package:omm_admin/security_guards/security_dashboard.dart';
+import 'package:omm_admin/admin_info/admin_info_form_module.dart';
+
+// ---------------- Dummy Pages ----------------
+class FestivalScreenn extends StatelessWidget {
+  const FestivalScreenn({super.key});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("View Bills"),
-        backgroundColor: Colors.green,
-      ),
-      body: const Center(child: Text("Here you can view all bills.")),
+      appBar: AppBar(title: const Text("Ongoing Events")),
+      body: const Center(child: Text("Here are the ongoing events.")),
     );
   }
 }
@@ -24,30 +28,49 @@ class ManageMembersPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Manage Members"),
-        backgroundColor: Colors.orange,
-      ),
+      appBar: AppBar(title: const Text("Manage Members")),
       body: const Center(child: Text("Here you can manage members.")),
     );
   }
 }
 
-class UpcomingRentPage extends StatelessWidget {
-  const UpcomingRentPage({super.key});
+class Announcements extends StatelessWidget {
+  const Announcements({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Upcoming Rent"),
-        backgroundColor: Colors.purple,
+      appBar: AppBar(title: const Text("Announcements")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Lottie Animation
+            /* Lottie.asset(
+              'assets/gifs/empty_red.json',
+              width: 220,
+              height: 220,
+              repeat: true,
+            ),
+            const SizedBox(height: 16),*/
+
+            // Text below animation
+            const Text(
+              "No Announcements",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
       ),
-      body: const Center(child: Text("Here is the upcoming rent info.")),
     );
   }
 }
 
-// --------------------- Dashboard Page ---------------------
+// ---------------- Dashboard ----------------
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -56,372 +79,238 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  int _selectedIndex = 2;
-  String _selectedPriority = "Medium";
-  final GlobalKey<CurvedNavigationBarState> _bottomNavigationKey = GlobalKey();
+  String _apartmentName = "Loading...";
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _loadApartmentName();
+    adminInfoModel.addListener(_onAdminInfoChanged);
+  }
+
+  @override
+  void dispose() {
+    adminInfoModel.removeListener(_onAdminInfoChanged);
+    super.dispose();
+  }
+
+  void _onAdminInfoChanged() {
+    if (mounted) {
+      setState(() {
+        _apartmentName = adminInfoModel.apartment.isNotEmpty
+            ? adminInfoModel.apartment
+            : "Omm Apartments";
+      });
+    }
+  }
+
+  void _loadApartmentName() async {
+    try {
+      await AdminInfoModel.loadFromBackend();
+      if (mounted) {
+        setState(() {
+          _apartmentName = adminInfoModel.apartment.isNotEmpty
+              ? adminInfoModel.apartment
+              : "Omm Apartments";
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading apartment name: $e");
+      if (mounted) {
+        setState(() {
+          _apartmentName = "Omm Apartments"; // Fallback
+        });
+      }
+    }
+  }
+
+  void _addEvent() async {
+    // We don't use the return value right now; keep call for future use
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddEventPage()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final List<String> imgList = [
-      "https://picsum.photos/id/1015/600/300",
-      "https://picsum.photos/id/1016/600/300",
-      "https://picsum.photos/id/1018/600/300",
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1491553895911-0055eca6402d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1501785888041-af3ef285b470?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
     ];
-
-    // Grid box calculation
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double horizontalPadding = 16;
-    final double spacing = 16;
-    final double boxWidth = (screenWidth - horizontalPadding * 2 - spacing) / 2;
-    final double boxHeight = boxWidth * 0.9; // slightly rectangular
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
+
       body: SafeArea(
-        child: Column(
-          children: [
-            // ---------- Header ----------
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        "Omm Apartments",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        "Comfortable living, happy community",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                  const CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.blueGrey,
-                    child: Icon(Icons.apartment, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-
-            // ---------- Scrollable Content ----------
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 80),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 80),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ---------- Header ----------
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const SizedBox(height: 16),
-
-                    // ---------- Carousel ----------
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: CarouselSlider(
-                          options: CarouselOptions(
-                            height: 180,
-                            autoPlay: true,
-                            enlargeCenterPage: true,
-                            viewportFraction: 0.95,
-                            aspectRatio: 16 / 9,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _apartmentName,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
-                          items: imgList.map((item) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.network(
-                                  item,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                ),
-                              ),
-                            );
-                          }).toList(),
                         ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ---------- Announcements ----------
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
+                        SizedBox(height: 2),
+                        Text(
+                          "Premium Residential Complex",
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
-                        child: ExpansionTile(
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          childrenPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          title: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                "Announcements",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                "${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year} "
-                                "${DateTime.now().hour % 12 == 0 ? 12 : DateTime.now().hour % 12}:${DateTime.now().minute.toString().padLeft(2, '0')} "
-                                "${DateTime.now().hour >= 12 ? 'PM' : 'AM'}",
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          children: [
-                            TextField(
-                              decoration: InputDecoration(
-                                hintText: "Enter Title...",
-                                prefixIcon: const Icon(
-                                  Icons.title,
-                                  color: Colors.blueGrey,
-                                  size: 20,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                isDense: true,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              maxLines: 2,
-                              decoration: InputDecoration(
-                                hintText: "Enter Description...",
-                                prefixIcon: const Icon(
-                                  Icons.description,
-                                  color: Colors.blueGrey,
-                                  size: 20,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                isDense: true,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _selectedPriority,
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: "High",
-                                          child: Text("High"),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: "Medium",
-                                          child: Text("Medium"),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: "Low",
-                                          child: Text("Low"),
-                                        ),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedPriority = value!;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blueGrey,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 10,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  onPressed: () {},
-                                  icon: const Icon(
-                                    Icons.send,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                  label: const Text(
-                                    "Post",
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                      ],
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // ---------- Manage Section ----------
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Manage",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio: boxWidth / boxHeight,
-                            children: [
-                              _buildModernManageBox(
-                                Icons.event,
-                                "Ongoing Events",
-                                width: boxWidth,
-                                height: boxHeight,
-                                color: Colors.teal, // unique color
-                                page: const FestivalScreen(),
-                              ),
-                              _buildModernManageBox(
-                                Icons.receipt_long,
-                                "View Bills",
-                                width: boxWidth,
-                                height: boxHeight,
-                                color: Colors.blue, // unique color
-                                page: null,
-                              ),
-                              _buildModernManageBox(
-                                Icons.group,
-                                "Manage Members",
-                                width: boxWidth,
-                                height: boxHeight,
-                                color: Colors.orange, // unique color
-                                page: null,
-                              ),
-                              _buildModernManageBox(
-                                Icons.home,
-                                "Upcoming Rent",
-                                width: boxWidth,
-                                height: boxHeight,
-                                color: Colors.purple, // unique color
-                                page: null,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    const CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Color(0xFF455A64),
+                      child: Icon(Icons.apartment, color: Colors.white),
                     ),
-
-                    const SizedBox(height: 30),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 10),
+
+              // ---------- Carousel ----------
+              CarouselSlider(
+                options: CarouselOptions(
+                  height: 200,
+                  autoPlay: true,
+                  enlargeCenterPage: true,
+                  viewportFraction: 0.9,
+                  aspectRatio: 16 / 9,
+                ),
+                items: imgList.map((item) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(
+                      item,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              size: 50,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ---------- Manage Section ----------
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.manage_accounts),
+                        SizedBox(width: 5),
+                        const Text(
+                          "Manage",
+                          style: TextStyle(
+                            fontSize: 23,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 1.2,
+                      children: [
+                        _buildManageCard(
+                          context,
+                          icon: Icons.report_problem,
+                          title: "Complaints",
+                          subtitle: "3 active complaints",
+                          color: Colors.red.shade100,
+                          iconColor: Colors.red,
+                          page: ComplaintPage(),
+                        ),
+                        _buildManageCard(
+                          context,
+                          icon: Icons.receipt_long,
+                          title: "Manage Bills",
+                          subtitle: "12 pending bills",
+                          color: Colors.green.shade100,
+                          iconColor: Colors.green,
+                          page: BillsPage(),
+                        ),
+
+                        _buildManageCard(
+                          context,
+                          icon: Icons.theater_comedy,
+                          title: "Bookings ",
+                          subtitle: "Tap to view",
+                          color: Colors.blue.shade100,
+                          iconColor: Colors.blueAccent,
+                          page: BookingAmenitiesPage(),
+                        ),
+                        _buildManageCard(
+                          context,
+                          icon: Icons.security,
+                          title: "Security & Staff",
+                          subtitle: "Tap to view",
+                          color: Colors.purple.shade100,
+                          iconColor: Colors.deepPurple,
+                          page: SecurityDashboardPage(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
 
       // ---------- Bottom Navigation ----------
-      bottomNavigationBar: CurvedNavigationBar(
-        key: _bottomNavigationKey,
-        index: _selectedIndex,
-        height: 60,
-        items: const [
-          Icon(Icons.smart_toy_outlined, size: 28, color: Colors.white),
-          Icon(Icons.home_outlined, size: 28, color: Colors.white),
-          Icon(Icons.add_box_outlined, size: 28, color: Colors.white),
-          Icon(Icons.receipt_long, size: 28, color: Colors.white),
-          Icon(Icons.person_outline, size: 28, color: Colors.white),
-        ],
-        color: const Color(0xFF607D8B),
-        buttonBackgroundColor: const Color(0xFF455A64),
-        backgroundColor: Colors.transparent,
-        animationCurve: Curves.easeInOut,
-        animationDuration: const Duration(milliseconds: 300),
-        onTap: _onItemTapped,
-      ),
     );
   }
 
-  // ---------- Modern Manage Box ----------
-  Widget _buildModernManageBox(
-    IconData icon,
-    String title, {
-    required double width,
-    required double height,
-    required Color color, // new color parameter
+  // ---------- Manage Card ----------
+  Widget _buildManageCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required Color iconColor,
     Widget? page,
   }) {
     return GestureDetector(
@@ -431,43 +320,30 @@ class _DashboardPageState extends State<DashboardPage> {
             context,
             MaterialPageRoute(builder: (context) => page),
           );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("No page available for $title")),
-          );
         }
       },
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [color.withOpacity(0.8), color]),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 28, color: iconColor),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
         ),
       ),
     );
