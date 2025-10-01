@@ -408,10 +408,11 @@ class FestivalContentState extends State<FestivalContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Event Image Section
+                // ---------- First Row: Image + Title/Toggle ----------
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Event Image or Icon
+                    // Event Image
                     Container(
                       width: 60,
                       height: 60,
@@ -433,66 +434,68 @@ class FestivalContentState extends State<FestivalContent> {
                     ),
                     const SizedBox(width: 12),
 
-                    // Event Title and Status
+                    // Title, Toggle, Description
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            fest.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Transform.scale(
-                                scale: 0.65,
-                                child: Switch.adaptive(
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  value: fest.isActive,
-                                  onChanged: (v) {
-                                    _toggleEventStatus(fest);
-                                  },
+                              Expanded(
+                                child: Text(
+                                  fest.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                fest.isActive ? 'Active' : 'Inactive',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: fest.isActive
-                                      ? Colors.greenAccent
-                                      : Colors.redAccent,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              Row(
+                                children: [
+                                  Transform.scale(
+                                    scale: 0.7,
+                                    child: Switch.adaptive(
+                                      value: fest.isActive,
+                                      onChanged: (v) =>
+                                          _toggleEventStatus(fest),
+                                    ),
+                                  ),
+                                  Text(
+                                    fest.isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: fest.isActive
+                                          ? Colors.greenAccent
+                                          : Colors.redAccent,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            fest.description,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 12),
 
-                // Description
-                Text(
-                  fest.description,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 12),
-
-                // Start and End Dates
+                // ---------- Dates ----------
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -508,13 +511,12 @@ class FestivalContentState extends State<FestivalContent> {
                           'Start: ${fest.startDate != null ? "${fest.startDate!.day}/${fest.startDate!.month}/${fest.startDate!.year}" : "N/A"}',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.8),
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
-
                     Row(
                       children: [
                         Icon(
@@ -527,7 +529,7 @@ class FestivalContentState extends State<FestivalContent> {
                           'End: ${fest.endDate != null ? "${fest.endDate!.day}/${fest.endDate!.month}/${fest.endDate!.year}" : "N/A"}',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.8),
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -535,23 +537,25 @@ class FestivalContentState extends State<FestivalContent> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Progress indicator with percentage
+
+                const SizedBox(height: 10),
+
+                // ---------- Progress ----------
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    const Text(
                       'Progress',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       '${(progress * 100).toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -559,21 +563,28 @@ class FestivalContentState extends State<FestivalContent> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: Colors.white.withOpacity(0.3),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    fest.isActive ? Colors.greenAccent : Colors.grey,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    backgroundColor: Colors.white.withOpacity(0.3),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      fest.isActive ? Colors.greenAccent : Colors.grey,
+                    ),
                   ),
                 ),
+
                 const SizedBox(height: 8),
+
+                // ---------- Collected vs Target ----------
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       'Collected: ₹${fest.collectedAmount.toStringAsFixed(0)}',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withOpacity(0.95),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -581,7 +592,7 @@ class FestivalContentState extends State<FestivalContent> {
                     Text(
                       'Target: ₹${fest.targetAmount.toStringAsFixed(0)}',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withOpacity(0.95),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),

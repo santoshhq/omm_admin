@@ -28,6 +28,7 @@ class _AddEventPageState extends State<AddEventPage> {
   DateTime? _endDate;
 
   File? _eventImage;
+  String? _existingImageUrl; // Track existing image URL
   final List<TextEditingController> _detailControllers = [];
   bool _isSubmitting = false;
 
@@ -57,28 +58,119 @@ class _AddEventPageState extends State<AddEventPage> {
       _startDate = event.startDate;
       _endDate = event.endDate;
 
-      // Initialize event details
+      // Set existing image URL if available
+      if (event.imagePaths.isNotEmpty) {
+        final imagePath = event.imagePaths.first;
+        if (imagePath.startsWith('data:image')) {
+          _existingImageUrl = imagePath; // Base64 image
+        } else {
+          _existingImageUrl = imagePath.startsWith('http')
+              ? imagePath
+              : '${ApiService.baseUrl}/$imagePath';
+        }
+      }
+
       for (final detail in event.eventDetails) {
         final controller = TextEditingController(text: detail);
         _detailControllers.add(controller);
       }
 
-      // Add empty controller if no details exist
       if (_detailControllers.isEmpty) {
         _detailControllers.add(TextEditingController());
       }
     } else {
-      // Add one empty detail field for new events
       _detailControllers.add(TextEditingController());
     }
   }
 
+  /// Check if we have any image (new or existing)
+  bool get _hasImage => _eventImage != null || _existingImageUrl != null;
+
+  /// Get the current image to display
+  Widget _buildImageWidget() {
+    if (_eventImage != null) {
+      // Show newly picked image
+      return ClipOval(
+        child: Image.file(
+          _eventImage!,
+          width: 90,
+          height: 90,
+          fit: BoxFit.cover,
+        ),
+      );
+    } else if (_existingImageUrl != null) {
+      // Show existing image from server
+      if (_existingImageUrl!.startsWith('data:image')) {
+        // Base64 image
+        final base64Str = _existingImageUrl!.split(',').last;
+        return ClipOval(
+          child: Image.memory(
+            base64Decode(base64Str),
+            width: 90,
+            height: 90,
+            fit: BoxFit.cover,
+          ),
+        );
+      } else {
+        // Network image
+        return ClipOval(
+          child: Image.network(
+            _existingImageUrl!,
+            width: 90,
+            height: 90,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(child: CircularProgressIndicator()),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.celebration,
+                  size: 40,
+                  color: Colors.deepOrange,
+                ),
+              );
+            },
+          ),
+        );
+      }
+    } else {
+      // No image - show celebration icon
+      return Container(
+        width: 90,
+        height: 90,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.celebration,
+          size: 40,
+          color: Colors.deepOrange,
+        ),
+      );
+    }
+  }
+
   Future<String?> _getAdminId() async {
-    // Try AdminSessionService first (preferred method)
     String? adminId = await AdminSessionService.getAdminId();
     print('🔍 AdminSessionService admin ID: $adminId');
 
-    // If not found, try alternative keys for backward compatibility
     if (adminId == null) {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -99,7 +191,6 @@ class _AddEventPageState extends State<AddEventPage> {
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // 1️⃣ Validate dates
     if (_startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -120,7 +211,6 @@ class _AddEventPageState extends State<AddEventPage> {
       return;
     }
 
-    // 2️⃣ Get admin ID
     final adminId = await _getAdminId();
     if (adminId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -132,18 +222,14 @@ class _AddEventPageState extends State<AddEventPage> {
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    setState(() => _isSubmitting = true);
 
     try {
-      // 3️⃣ Gather event details
       final eventDetails = _detailControllers
           .map((c) => c.text.trim())
           .where((d) => d.isNotEmpty)
           .toList();
 
-      // 4️⃣ Convert image to base64 if selected
       String? imageToSend;
       if (_eventImage != null) {
         imageToSend = await _getImageAsBase64();
@@ -154,11 +240,9 @@ class _AddEventPageState extends State<AddEventPage> {
         }
       }
 
-      // 5️⃣ API call
       Map<String, dynamic> response;
 
       if (widget.existingEvent != null) {
-        // Update existing event
         response = await ApiService.updateEventCard(
           id: widget.existingEvent!.id!,
           adminId: adminId,
@@ -182,7 +266,6 @@ class _AddEventPageState extends State<AddEventPage> {
           Navigator.pop(context, updatedEvent);
         }
       } else {
-        // Create new event
         response = await ApiService.createEventCard(
           image: imageToSend,
           name: _titleController.text.trim(),
@@ -216,9 +299,7 @@ class _AddEventPageState extends State<AddEventPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -229,14 +310,7 @@ class _AddEventPageState extends State<AddEventPage> {
     if (pickedFile != null && mounted) {
       setState(() {
         _eventImage = File(pickedFile.path);
-      });
-    }
-  }
-
-  void _removeImage() {
-    if (mounted) {
-      setState(() {
-        _eventImage = null;
+        _existingImageUrl = null; // Clear existing image when new one is picked
       });
     }
   }
@@ -248,10 +322,10 @@ class _AddEventPageState extends State<AddEventPage> {
     final img.Image? image = img.decodeImage(originalBytes);
     if (image == null) return null;
 
-    // 1️⃣ Resize large images
     final maxWidth = 1280;
     final maxHeight = 720;
     img.Image resizedImage = image;
+
     if (image.width > maxWidth || image.height > maxHeight) {
       double aspectRatio = image.width / image.height;
       int newWidth, newHeight;
@@ -267,24 +341,18 @@ class _AddEventPageState extends State<AddEventPage> {
       resizedImage = img.copyResize(image, width: newWidth, height: newHeight);
     }
 
-    // 2️⃣ Compress with reasonable quality
     final compressedBytes = Uint8List.fromList(
       img.encodeJpg(resizedImage, quality: 70),
     );
 
-    // 3️⃣ Convert to base64
     final base64String = base64Encode(compressedBytes);
     final extension = _eventImage!.path.split('.').last.toLowerCase();
     return 'data:image/$extension;base64,$base64String';
   }
 
   void _addDetailField() {
-    setState(() {
-      _detailControllers.add(TextEditingController());
-    });
+    setState(() => _detailControllers.add(TextEditingController()));
   }
-
-  // _selectedDate and _pickDate removed - not used in current UI
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +385,7 @@ class _AddEventPageState extends State<AddEventPage> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20), // curved edges
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -330,39 +398,22 @@ class _AddEventPageState extends State<AddEventPage> {
             key: _formKey,
             child: Column(
               children: [
-                // Avatar + Event Title in one row
                 Row(
                   children: [
                     Stack(
                       alignment: Alignment.bottomRight,
                       children: [
-                        CircleAvatar(
-                          radius: 45,
-                          backgroundColor: Colors.grey.shade300,
-                          backgroundImage: _eventImage != null
-                              ? FileImage(_eventImage!)
-                              : null,
-                          child: _eventImage == null
-                              ? const Icon(
-                                  Icons.celebration,
-                                  size: 40,
-                                  color: Colors.deepOrange,
-                                )
-                              : null,
-                        ),
-                        // Upload/Remove button inside avatar
+                        _buildImageWidget(),
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: InkWell(
-                            onTap: _eventImage == null
-                                ? _pickImage
-                                : _removeImage,
+                            onTap: _pickImage,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: _eventImage == null
+                                color: !_hasImage
                                     ? themeColor
-                                    : Colors.red,
+                                    : Colors.blue.shade600,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: Colors.white,
@@ -371,9 +422,7 @@ class _AddEventPageState extends State<AddEventPage> {
                               ),
                               padding: const EdgeInsets.all(6),
                               child: Icon(
-                                _eventImage == null
-                                    ? Icons.upload
-                                    : Icons.close,
+                                !_hasImage ? Icons.upload : Icons.edit,
                                 color: Colors.white,
                                 size: 18,
                               ),
@@ -383,7 +432,6 @@ class _AddEventPageState extends State<AddEventPage> {
                       ],
                     ),
                     const SizedBox(width: 16),
-                    // Event Title beside icon
                     Expanded(
                       child: TextFormField(
                         controller: _titleController,
@@ -405,32 +453,25 @@ class _AddEventPageState extends State<AddEventPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Event Start Date Picker
-
-                // Start Date picker
+                // Start Date
                 InkWell(
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
-                      initialDate:
-                          _startDate ?? DateTime.now(), // default selected date
-                      firstDate: DateTime.now(), // ✅ disables all past days
-                      lastDate: DateTime(2100), // future limit
+                      initialDate: _startDate ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
                             colorScheme: const ColorScheme.light(
-                              primary: Colors
-                                  .deepOrange, // header & selected date color
-                              onPrimary:
-                                  Colors.white, // text color on selected date
-                              onSurface: Colors.black, // default text color
+                              primary: Colors.deepOrange,
+                              onPrimary: Colors.white,
+                              onSurface: Colors.black,
                             ),
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
-                                foregroundColor:
-                                    Colors.deepOrange, // buttons (OK/CANCEL)
+                                foregroundColor: Colors.deepOrange,
                               ),
                             ),
                           ),
@@ -438,14 +479,8 @@ class _AddEventPageState extends State<AddEventPage> {
                         );
                       },
                     );
-
-                    if (picked != null) {
-                      setState(() {
-                        _startDate = picked; // store the picked date
-                      });
-                    }
+                    if (picked != null) setState(() => _startDate = picked);
                   },
-
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: "Event Start Date",
@@ -470,31 +505,26 @@ class _AddEventPageState extends State<AddEventPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
-                // End Date picker
+                // End Date
                 InkWell(
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: _endDate ?? (_startDate ?? DateTime.now()),
-                      firstDate: DateTime.now(), // ✅ disables past days
-                      lastDate: DateTime(2100), // allow far future
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
                             colorScheme: const ColorScheme.light(
-                              primary:
-                                  Colors.deepOrange, // header & selected date
-                              onPrimary:
-                                  Colors.white, // text color on selected date
-                              onSurface: Colors.black, // default text color
+                              primary: Colors.deepOrange,
+                              onPrimary: Colors.white,
+                              onSurface: Colors.black,
                             ),
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
-                                foregroundColor:
-                                    Colors.deepOrange, // OK/CANCEL buttons
+                                foregroundColor: Colors.deepOrange,
                               ),
                             ),
                           ),
@@ -502,12 +532,8 @@ class _AddEventPageState extends State<AddEventPage> {
                         );
                       },
                     );
-
-                    if (picked != null) {
-                      setState(() => _endDate = picked);
-                    }
+                    if (picked != null) setState(() => _endDate = picked);
                   },
-
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: "Event End Date",
@@ -532,7 +558,6 @@ class _AddEventPageState extends State<AddEventPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 16),
                 // Description
                 TextFormField(
@@ -554,7 +579,6 @@ class _AddEventPageState extends State<AddEventPage> {
                       value!.isEmpty ? "Enter description" : null,
                 ),
                 const SizedBox(height: 16),
-
                 // Target Amount
                 TextFormField(
                   controller: _targetController,
@@ -574,8 +598,7 @@ class _AddEventPageState extends State<AddEventPage> {
                       value!.isEmpty ? "Enter target amount" : null,
                 ),
                 const SizedBox(height: 24),
-
-                // Event Details Section
+                // Event Details
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -597,7 +620,6 @@ class _AddEventPageState extends State<AddEventPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-
                 Column(
                   children: _detailControllers.asMap().entries.map((entry) {
                     int index = entry.key;
@@ -607,7 +629,6 @@ class _AddEventPageState extends State<AddEventPage> {
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
                         children: [
-                          // Expanded text field
                           Expanded(
                             child: TextFormField(
                               controller: controller,
@@ -625,7 +646,6 @@ class _AddEventPageState extends State<AddEventPage> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Remove button
                           IconButton(
                             icon: const Icon(
                               Icons.remove_circle,
@@ -648,47 +668,95 @@ class _AddEventPageState extends State<AddEventPage> {
                 // Save Button
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _saveEvent,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: themeColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                  height: 55,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _saveEvent,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.black45,
+                        elevation: 8,
+                        padding: EdgeInsets.zero,
                       ),
-                      elevation: 5,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_isSubmitting)
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _isSubmitting
+                                ? [
+                                    themeColor.withOpacity(0.6),
+                                    themeColor.withOpacity(0.8),
+                                  ]
+                                : [themeColor, themeColor.withOpacity(0.9)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: themeColor.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
                             ),
-                          )
-                        else
-                          const Icon(Icons.save, size: 22, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isSubmitting
-                              ? "Saving..."
-                              : widget.existingEvent != null
-                              ? "Update Event"
-                              : "Add Event",
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                          ],
+                        ),
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (child, anim) =>
+                                    ScaleTransition(scale: anim, child: child),
+                                child: _isSubmitting
+                                    ? const SizedBox(
+                                        key: ValueKey("loader"),
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 3,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.save_alt_rounded,
+                                        key: ValueKey("icon"),
+                                        size: 24,
+                                        color: Colors.white,
+                                      ),
+                              ),
+                              const SizedBox(width: 12),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (child, anim) =>
+                                    FadeTransition(opacity: anim, child: child),
+                                child: Text(
+                                  _isSubmitting
+                                      ? "Saving..."
+                                      : widget.existingEvent != null
+                                      ? "Update Event"
+                                      : "Add Event",
+                                  key: ValueKey(
+                                    _isSubmitting
+                                        ? "saving"
+                                        : widget.existingEvent != null
+                                        ? "update"
+                                        : "add",
+                                  ),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
