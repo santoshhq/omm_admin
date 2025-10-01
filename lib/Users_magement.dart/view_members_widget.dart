@@ -117,17 +117,17 @@ class _MembersPageState extends State<MembersPage> {
   Color _getCardColor(String? status) {
     switch (status) {
       case 'I':
-        return Colors.red.shade50;
+        return Colors.red.shade100;
       case 'II':
-        return Colors.green.shade50;
+        return Colors.green.shade100;
       case 'III':
-        return Colors.blue.shade50;
+        return Colors.blue.shade100;
       case 'IV':
         return Colors.orange.shade50;
       case 'V':
-        return Colors.purple.shade50;
+        return Colors.purple.shade100;
       case 'VI':
-        return Colors.teal.shade50;
+        return Colors.teal.shade100;
       default:
         return Colors.grey.shade100; // fallback
     }

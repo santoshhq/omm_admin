@@ -74,6 +74,20 @@ class ApiService {
     }
   }
 
+  // Dynamic base URL for announcements based on platform
+  static String get announcementsBaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/announcements";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/announcements";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/announcements";
+    }
+  }
+
   /// Retry logic for handling connection issues
   static Future<Map<String, dynamic>> _retryRequest(
     Future<Map<String, dynamic>> Function() request, {
@@ -1897,6 +1911,339 @@ class ApiService {
         );
       }
       throw Exception("Failed to toggle event status: $e");
+    }
+  }
+
+  // ==================== ANNOUNCEMENTS API METHODS ====================
+
+  /// Create a new announcement card
+  static Future<Map<String, dynamic>> createAnnouncementCard({
+    required String title,
+    required String description,
+    required String priority,
+    required String adminId,
+  }) async {
+    try {
+      print("\n🎯 Creating announcement card...");
+      print("📝 Title: $title");
+      print("⚡ Priority: $priority");
+
+      final response = await http.post(
+        Uri.parse(announcementsBaseUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'title': title,
+          'description': description,
+          'priority': priority,
+          'adminId': adminId,
+        }),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && body["success"] == true) {
+        print("✅ Announcement created successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Create announcement failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to create announcement");
+      }
+    } catch (e) {
+      print("🔥 Error creating announcement: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to create announcement: $e");
+    }
+  }
+
+  /// Get all announcement cards
+  static Future<Map<String, dynamic>> getAllAnnouncementCards({
+    bool? activeOnly,
+    String? adminId,
+    String? priority,
+  }) async {
+    try {
+      print("\n📋 Fetching all announcements...");
+
+      final queryParams = <String, String>{};
+      if (activeOnly != null) queryParams['activeOnly'] = activeOnly.toString();
+      if (adminId != null) queryParams['adminId'] = adminId;
+      if (priority != null) queryParams['priority'] = priority;
+
+      final uri = Uri.parse(
+        announcementsBaseUrl,
+      ).replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body length: ${response.body.length}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print(
+          "✅ Announcements fetched successfully! Count: ${body["data"]?.length ?? 0}",
+        );
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"] ?? [],
+        };
+      } else {
+        print("❌ Fetch announcements failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch announcements");
+      }
+    } catch (e) {
+      print("🔥 Error fetching announcements: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch announcements: $e");
+    }
+  }
+
+  /// Get announcement card by ID
+  static Future<Map<String, dynamic>> getAnnouncementCardById(String id) async {
+    try {
+      print("\n🔍 Fetching announcement by ID: $id");
+
+      final response = await http.get(
+        Uri.parse('$announcementsBaseUrl/$id'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Announcement fetched successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Fetch announcement failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch announcement");
+      }
+    } catch (e) {
+      print("🔥 Error fetching announcement: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch announcement: $e");
+    }
+  }
+
+  /// Update announcement card
+  static Future<Map<String, dynamic>> updateAnnouncementCard({
+    required String id,
+    required String adminId,
+    String? title,
+    String? description,
+    String? priority,
+    bool? isActive,
+  }) async {
+    try {
+      print("\n✏️ Updating announcement ID: $id");
+
+      final updateData = <String, dynamic>{'adminId': adminId};
+      if (title != null) updateData['title'] = title;
+      if (description != null) updateData['description'] = description;
+      if (priority != null) updateData['priority'] = priority;
+      if (isActive != null) updateData['isActive'] = isActive;
+
+      final response = await http.put(
+        Uri.parse('$announcementsBaseUrl/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(updateData),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Announcement updated successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Update announcement failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to update announcement");
+      }
+    } catch (e) {
+      print("🔥 Error updating announcement: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to update announcement: $e");
+    }
+  }
+
+  /// Delete announcement card
+  static Future<Map<String, dynamic>> deleteAnnouncementCard({
+    required String id,
+    required String adminId,
+  }) async {
+    try {
+      print("\n🗑️ Deleting announcement ID: $id");
+
+      final response = await http.delete(
+        Uri.parse('$announcementsBaseUrl/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'adminId': adminId}),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Announcement deleted successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Delete announcement failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to delete announcement");
+      }
+    } catch (e) {
+      print("🔥 Error deleting announcement: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to delete announcement: $e");
+    }
+  }
+
+  /// Toggle announcement status (active/inactive)
+  static Future<Map<String, dynamic>> toggleAnnouncementStatus({
+    required String id,
+    required String adminId,
+  }) async {
+    try {
+      print("\n🔄 Toggling announcement status for ID: $id");
+
+      final response = await http.put(
+        Uri.parse('$announcementsBaseUrl/$id/toggle'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'adminId': adminId}),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Announcement status toggled successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Toggle announcement status failed: ${body["message"]}");
+        throw Exception(
+          body["message"] ?? "Failed to toggle announcement status",
+        );
+      }
+    } catch (e) {
+      print("🔥 Error toggling announcement status: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to toggle announcement status: $e");
+    }
+  }
+
+  /// Get announcements by priority (High/Medium/Low)
+  static Future<Map<String, dynamic>> getAnnouncementsByPriority(
+    String priority,
+  ) async {
+    try {
+      print("\n🏷️ Fetching announcements by priority: $priority");
+
+      final response = await http.get(
+        Uri.parse('$announcementsBaseUrl/priority/$priority'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print(
+          "✅ Announcements by priority fetched successfully! Count: ${body["data"]?.length ?? 0}",
+        );
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"] ?? [],
+        };
+      } else {
+        print("❌ Fetch announcements by priority failed: ${body["message"]}");
+        throw Exception(
+          body["message"] ?? "Failed to fetch announcements by priority",
+        );
+      }
+    } catch (e) {
+      print("🔥 Error fetching announcements by priority: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch announcements by priority: $e");
     }
   }
 }

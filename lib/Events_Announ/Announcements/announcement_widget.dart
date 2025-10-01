@@ -1,8 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'announcement_module.dart';
+import '../../config/api_config.dart';
+import '../../services/admin_session_service.dart';
 
-/// ------------------- Announcement List -------------------
+/// ==================== Main Announcement Screen ====================
+class AnnouncementPage extends StatelessWidget {
+  const AnnouncementPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Announcements"),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Builder(
+              builder: (ctx) {
+                return TextButton.icon(
+                  onPressed: () {
+                    final state = ctx
+                        .findAncestorStateOfType<AnnouncementContentState>();
+                    if (state != null) {
+                      state.openComposeSheet(ctx);
+                    } else {
+                      Navigator.push(
+                        ctx,
+                        MaterialPageRoute(
+                          builder: (c) => const AnnouncementComposePage(),
+                        ),
+                      );
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                  label: const Text(
+                    "Add",
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      body: const AnnouncementContent(),
+    );
+  }
+}
+
+/// ==================== Announcement Content Widget ====================
 class AnnouncementContent extends StatefulWidget {
   const AnnouncementContent({super.key});
 
@@ -11,12 +71,99 @@ class AnnouncementContent extends StatefulWidget {
 }
 
 class AnnouncementContentState extends State<AnnouncementContent> {
-  final List<Announcement> _announcements = [];
+  List<Announcement> announcements = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  bool _isDisposed = false;
 
-  void addAnnouncement(Announcement a) {
-    setState(() => _announcements.insert(0, a));
+  /// Safe setState that checks if widget is still mounted and not disposed
+  void _safeSetState(VoidCallback fn) {
+    if (mounted && !_isDisposed) {
+      setState(fn);
+    }
   }
 
+  /// Sort announcements: active first, inactive at bottom, then by priority
+  void _sortAnnouncements() {
+    announcements.sort((a, b) {
+      // First sort by active status
+      if (a.isActive && !b.isActive) return -1;
+      if (!a.isActive && b.isActive) return 1;
+
+      // Then sort by priority (High > Medium > Low)
+      const priorityOrder = {'High': 0, 'Medium': 1, 'Low': 2};
+      final aPriority = priorityOrder[a.priority] ?? 1;
+      final bPriority = priorityOrder[b.priority] ?? 1;
+
+      if (aPriority != bPriority) return aPriority.compareTo(bPriority);
+
+      // Finally sort by creation date (newest first)
+      return b.createdDate.compareTo(a.createdDate);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnnouncements();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
+  /// Load all announcements from the backend
+  Future<void> _loadAnnouncements() async {
+    if (_isDisposed) return;
+
+    try {
+      _safeSetState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final response = await ApiService.getAllAnnouncementCards();
+
+      if (_isDisposed || !mounted) return;
+
+      final List<dynamic> announcementData = response['data'] ?? [];
+
+      _safeSetState(() {
+        announcements = announcementData
+            .map((json) => Announcement.fromJson(json))
+            .toList();
+        _sortAnnouncements();
+        _isLoading = false;
+      });
+    } catch (e) {
+      _safeSetState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Public method to refresh announcements (can be called from parent widgets)
+  Future<void> refreshAnnouncements() async {
+    await _loadAnnouncements();
+  }
+
+  /// Add optimistic announcement update (shows immediately, then refreshes)
+  void addOptimisticAnnouncement(Announcement announcement) {
+    if (_isDisposed) return;
+
+    _safeSetState(() {
+      announcements.insert(0, announcement);
+      _sortAnnouncements();
+    });
+
+    // Refresh from backend to get the real data
+    refreshAnnouncements();
+  }
+
+  /// Open compose sheet for creating or editing announcements
   Future<void> openComposeSheet(
     BuildContext ctx, {
     Announcement? existing,
@@ -27,253 +174,440 @@ class AnnouncementContentState extends State<AnnouncementContent> {
       ),
     );
     if (result != null) {
-      setState(() {
-        if (existing != null) {
-          final idx = _announcements.indexOf(existing);
-          if (idx != -1) _announcements[idx] = result;
-        } else {
-          _announcements.insert(0, result);
-        }
-      });
+      if (existing == null) {
+        // New announcement - add optimistically
+        addOptimisticAnnouncement(result);
+      } else {
+        // Updated announcement - refresh from backend
+        await refreshAnnouncements();
+      }
     }
   }
 
-  void _deleteAnnouncement(int index) {
-    setState(() => _announcements.removeAt(index));
+  /// Delete announcement
+  Future<void> _deleteAnnouncement(int index) async {
+    final announcement = announcements[index];
+
+    if (announcement.id == null) {
+      _showErrorSnackBar('Cannot delete announcement: Missing ID');
+      return;
+    }
+
+    // Show confirmation dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Announcement'),
+          content: Text(
+            'Are you sure you want to delete "${announcement.title}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Optimistic update - remove from list immediately
+      _safeSetState(() {
+        announcements.removeAt(index);
+      });
+
+      // API call to delete
+      final adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        throw Exception('Admin not logged in');
+      }
+
+      await ApiService.deleteAnnouncementCard(
+        id: announcement.id!,
+        adminId: adminId,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Announcement deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Rollback on error - add the announcement back
+      _safeSetState(() {
+        announcements.insert(index, announcement);
+        _sortAnnouncements();
+      });
+      _showErrorSnackBar(
+        'Failed to delete announcement: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    }
   }
 
-  Future<void> _editAnnouncement(int index) async {
-    await openComposeSheet(context, existing: _announcements[index]);
+  /// Edit announcement
+  void _editAnnouncement(int index) async {
+    await openComposeSheet(context, existing: announcements[index]);
+  }
+
+  /// Toggle announcement status
+  Future<void> _toggleAnnouncementStatus(Announcement announcement) async {
+    if (announcement.id == null || _isDisposed) return;
+
+    try {
+      // Optimistic update
+      final updatedAnnouncements = announcements.map((a) {
+        if (a.id == announcement.id) {
+          return a.copyWith(isActive: !a.isActive);
+        }
+        return a;
+      }).toList();
+
+      _safeSetState(() {
+        announcements = updatedAnnouncements;
+        _sortAnnouncements();
+      });
+
+      // API call
+      final adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        throw Exception('Admin not logged in');
+      }
+
+      await ApiService.toggleAnnouncementStatus(
+        id: announcement.id!,
+        adminId: adminId,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Announcement ${announcement.isActive ? 'activated' : 'deactivated'} successfully',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Rollback on error
+      await _loadAnnouncements();
+      _showErrorSnackBar(
+        'Failed to update announcement status: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    }
+  }
+
+  /// Show error snackbar
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_announcements.isEmpty) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
       return Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.campaign, size: 64, color: Colors.grey),
-            const SizedBox(height: 12),
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
             Text(
-              'No announcements yet',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
+              'Error Loading Announcements',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Tap + to create one',
-              style: Theme.of(context).textTheme.bodySmall,
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: refreshAnnouncements,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
             ),
           ],
         ),
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _announcements.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final a = _announcements[i];
-        return Slidable(
-          key: ValueKey(a.createdAt.millisecondsSinceEpoch),
-          endActionPane: ActionPane(
-            motion: const DrawerMotion(),
-            extentRatio: 0.36,
-            children: [
-              SlidableAction(
-                onPressed: (ctx) => _editAnnouncement(i),
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                icon: Icons.edit,
-                // label: 'Edit',
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-              SlidableAction(
-                onPressed: (ctx) => _deleteAnnouncement(i),
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                icon: Icons.delete,
-                // label: 'Delete',
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                ),
-              ),
-            ],
-          ),
-          child: Card(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 1,
-            color: a.isActive ? Colors.blue.shade100 : Colors.grey.shade200,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+    return RefreshIndicator(
+      onRefresh: refreshAnnouncements,
+      child: announcements.isEmpty
+          ? _buildEmptyState()
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ===== Title & Priority =====
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          a.title,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _priorityColor(a.priority),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          a.priority,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // ===== Description =====
-                  Text(
-                    a.description,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.black87,
-                      height: 1.4,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // ===== Footer =====
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${a.createdAt.toLocal()}'.split('.')[0],
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[700]),
-                          ),
-                        ],
-                      ),
-
-                      Row(
-                        children: [
-                          Text(
-                            a.isActive ? "Active" : "Deactive",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: a.isActive ? Colors.blue : Colors.red,
+                  Expanded(
+                    child: SlidableAutoCloseBehavior(
+                      child: ListView.builder(
+                        itemCount: announcements.length,
+                        itemBuilder: (context, index) {
+                          final announcement = announcements[index];
+                          return Slidable(
+                            key: ValueKey('${announcement.id}_$index'),
+                            groupTag: 'announcement_group',
+                            closeOnScroll: true,
+                            startActionPane: null,
+                            endActionPane: ActionPane(
+                              motion: const DrawerMotion(),
+                              extentRatio: 0.4,
+                              children: [
+                                SlidableAction(
+                                  onPressed: (ctx) => _editAnnouncement(index),
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  icon: Icons.edit,
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    bottomLeft: Radius.circular(16),
+                                  ),
+                                ),
+                                SlidableAction(
+                                  onPressed: (ctx) =>
+                                      _deleteAnnouncement(index),
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  icon: Icons.delete,
+                                  borderRadius: const BorderRadius.only(
+                                    topRight: Radius.circular(16),
+                                    bottomRight: Radius.circular(16),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Switch.adaptive(
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            value: a.isActive,
-                            onChanged: (v) {
-                              setState(() {
-                                a.isActive = v;
-                              });
-                            },
-                          ),
-                        ],
+                            child: _buildAnnouncementCard(announcement, index),
+                          );
+                        },
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        );
-      },
     );
   }
 
-  Color _priorityColor(String p) {
-    switch (p.toLowerCase()) {
+  /// Build empty state widget
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.campaign_outlined, size: 80, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            'No Announcements Yet',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap the + button to create your first announcement',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual announcement card
+  Widget _buildAnnouncementCard(Announcement announcement, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: announcement.isActive ? Colors.white : Colors.grey[100],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with title and priority
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    announcement.title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: announcement.isActive
+                          ? Colors.black87
+                          : Colors.grey[600],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getPriorityColor(announcement.priority),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    announcement.priority,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Description
+            Text(
+              announcement.description,
+              style: TextStyle(
+                fontSize: 14,
+                color: announcement.isActive
+                    ? Colors.grey[700]
+                    : Colors.grey[500],
+                height: 1.4,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Footer with date and status toggle
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Date
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatDate(announcement.createdDate),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+
+                // Status toggle
+                Row(
+                  children: [
+                    Text(
+                      announcement.isActive ? 'Active' : 'Inactive',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: announcement.isActive
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch.adaptive(
+                      value: announcement.isActive,
+                      onChanged: (value) =>
+                          _toggleAnnouncementStatus(announcement),
+                      activeColor: Colors.green,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get priority color
+  Color _getPriorityColor(String priority) {
+    switch (priority.toLowerCase()) {
       case 'high':
         return Colors.red;
+      case 'medium':
+        return Colors.orange;
       case 'low':
         return Colors.green;
       default:
-        return Colors.orange;
+        return Colors.grey;
+    }
+  }
+
+  /// Format date for display
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 7) {
+      return '${date.day}/${date.month}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
+    } else {
+      return 'Just now';
     }
   }
 }
 
-/// ------------------- Full-page with FAB -------------------
-class AnnouncementPage extends StatelessWidget {
-  final GlobalKey<AnnouncementContentState>? contentKey;
-
-  const AnnouncementPage({super.key, this.contentKey});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Announcements'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0.5,
-      ),
-      body: contentKey != null
-          ? AnnouncementContent(key: contentKey)
-          : const AnnouncementContent(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.of(context).push<Announcement>(
-            MaterialPageRoute(builder: (_) => AnnouncementComposePage()),
-          );
-          if (result != null) {
-            contentKey?.currentState?.addAnnouncement(result);
-          }
-        },
-        icon: const Icon(Icons.add),
-        label: const Text("New"),
-      ),
-    );
-  }
-}
-
-/// ------------------- Compose New Announcement -------------------
+/// ==================== Announcement Compose Page ====================
 class AnnouncementComposePage extends StatefulWidget {
   final Announcement? existing;
 
-  AnnouncementComposePage({super.key, this.existing});
+  const AnnouncementComposePage({super.key, this.existing});
 
   @override
   State<AnnouncementComposePage> createState() =>
@@ -281,17 +615,120 @@ class AnnouncementComposePage extends StatefulWidget {
 }
 
 class _AnnouncementComposePageState extends State<AnnouncementComposePage> {
-  final TextEditingController _title = TextEditingController();
-  final TextEditingController _desc = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
   String _priority = 'Medium';
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.existing != null) {
-      _title.text = widget.existing!.title;
-      _desc.text = widget.existing!.description;
+      _titleController.text = widget.existing!.title;
+      _descriptionController.text = widget.existing!.description;
       _priority = widget.existing!.priority;
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  /// Save announcement (create or update)
+  Future<void> _saveAnnouncement() async {
+    if (_titleController.text.trim().isEmpty) {
+      _showErrorSnackBar('Please enter a title');
+      return;
+    }
+
+    if (_descriptionController.text.trim().isEmpty) {
+      _showErrorSnackBar('Please enter a description');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Get admin ID from session
+      final adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        _showErrorSnackBar('Admin not logged in. Please login again.');
+        return;
+      }
+
+      if (widget.existing != null) {
+        // Update existing announcement
+        await ApiService.updateAnnouncementCard(
+          id: widget.existing!.id!,
+          adminId: adminId,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          priority: _priority,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Announcement updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // Create new announcement
+        await ApiService.createAnnouncementCard(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          priority: _priority,
+          adminId: adminId,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Announcement created successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+
+      if (mounted) {
+        // Return the created/updated announcement data for optimistic updates
+        final createdAnnouncement = Announcement(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          priority: _priority,
+          adminId: adminId,
+          createdDate: DateTime.now(),
+          isActive: true,
+        );
+        Navigator.pop(context, createdAnnouncement);
+      }
+    } catch (e) {
+      _showErrorSnackBar(
+        'Failed to save announcement: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Show error snackbar
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -312,117 +749,125 @@ class _AnnouncementComposePageState extends State<AnnouncementComposePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title
+              // Title field
               const Text(
                 'Title',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: _title,
+                controller: _titleController,
+                maxLength: 200,
                 decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.title),
-                  hintText: 'Enter title',
+                  hintText: 'Enter announcement title...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  prefixIcon: const Icon(Icons.title),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Description
+              // Description field
               const Text(
                 'Description',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 150,
-                child: TextField(
-                  controller: _desc,
-                  maxLines: null,
-                  expands: true,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.notes),
-                    hintText: 'Write details...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.all(12),
+              TextField(
+                controller: _descriptionController,
+                maxLines: 6,
+                maxLength: 1000,
+                keyboardType: TextInputType.multiline,
+                decoration: InputDecoration(
+                  hintText: 'Enter announcement description...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  prefixIcon: const Icon(Icons.description),
+                  alignLabelWithHint: true,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // Priority Chips
+              // Priority selection
               const Text(
-                "Priority",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                'Priority',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  ChoiceChip(
-                    label: const Text('High'),
-                    selected: _priority == 'High',
-                    selectedColor: Colors.red,
-                    onSelected: (_) => setState(() => _priority = 'High'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Medium'),
-                    selected: _priority == 'Medium',
-                    selectedColor: Colors.orange,
-                    onSelected: (_) => setState(() => _priority = 'Medium'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Low'),
-                    selected: _priority == 'Low',
-                    selectedColor: Colors.green,
-                    onSelected: (_) => setState(() => _priority = 'Low'),
-                  ),
+                  _buildPriorityChip('High', Colors.red),
+                  _buildPriorityChip('Medium', Colors.orange),
+                  _buildPriorityChip('Low', Colors.green),
                 ],
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 32),
 
-              // Post Button
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final ann = Announcement(
-                      title: _title.text.trim(),
-                      description: _desc.text.trim(),
-                      priority: _priority,
-                    );
-                    if (ann.title.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a title')),
-                      );
-                      return;
-                    }
-                    Navigator.pop(context, ann);
-                  },
-                  icon: const Icon(Icons.send, size: 20, color: Colors.white),
-                  label: Text(
-                    widget.existing != null
-                        ? 'Save Changes'
-                        : 'Post Announcement',
-                    style: const TextStyle(color: Colors.white),
-                  ),
+              // Save button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveAnnouncement,
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 14,
-                    ),
                     backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          widget.existing != null
+                              ? 'Update Announcement'
+                              : 'Create Announcement',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build priority selection chip
+  Widget _buildPriorityChip(String priority, Color color) {
+    final isSelected = _priority == priority;
+    return GestureDetector(
+      onTap: () => setState(() => _priority = priority),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          priority,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey[600],
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
         ),
       ),

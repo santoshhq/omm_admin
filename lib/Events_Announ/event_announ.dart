@@ -139,17 +139,19 @@ class _EventAnnounState extends State<EventAnnoun> {
   }
 
   Future<void> _openAnnouncementComposer() async {
-    final result = await Navigator.push(
+    final Announcement? result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AnnouncementComposePage()),
+      MaterialPageRoute(builder: (_) => const AnnouncementComposePage()),
     );
 
     if (!mounted) return;
 
-    if (result is Announcement) {
+    // If announcement was created successfully, switch to announcements tab
+    if (result != null) {
       setState(() => _showEvents = false);
+      // Add the new announcement optimistically to the list
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _announcementKey.currentState?.addAnnouncement(result);
+        _announcementKey.currentState?.addOptimisticAnnouncement(result);
       });
     }
   }
