@@ -84,7 +84,7 @@ class _BottumNavigationState extends State<BottumNavigation> {
         const Center(child: Text("Please login to access members")),
         AmenitiesAdminPage(),
         const DashboardPage(),
-        const Event_Announ(),
+        const EventAnnoun(),
         const AdminPage(),
       ];
     }
@@ -94,7 +94,7 @@ class _BottumNavigationState extends State<BottumNavigation> {
       MembersPage(adminId: _adminId),
       AmenitiesAdminPage(), // Amenities management
       const DashboardPage(), // Dashboard home
-      const Event_Announ(), // Events & announcements
+      const EventAnnoun(), // Events & announcements
       const AdminPage(), // Admin profile
     ];
   }

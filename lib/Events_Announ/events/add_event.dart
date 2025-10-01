@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image/image.dart' as img;
 import 'modules.dart';
 import '../../config/api_config.dart';
 import '../../services/admin_session_service.dart';
@@ -97,7 +99,7 @@ class _AddEventPageState extends State<AddEventPage> {
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate dates
+    // 1️⃣ Validate dates
     if (_startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -118,6 +120,7 @@ class _AddEventPageState extends State<AddEventPage> {
       return;
     }
 
+    // 2️⃣ Get admin ID
     final adminId = await _getAdminId();
     if (adminId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,30 +137,29 @@ class _AddEventPageState extends State<AddEventPage> {
     });
 
     try {
-      // Get event details from controllers
+      // 3️⃣ Gather event details
       final eventDetails = _detailControllers
-          .map((controller) => controller.text.trim())
-          .where((detail) => detail.isNotEmpty)
+          .map((c) => c.text.trim())
+          .where((d) => d.isNotEmpty)
           .toList();
+
+      // 4️⃣ Convert image to base64 if selected
+      String? imageToSend;
+      if (_eventImage != null) {
+        imageToSend = await _getImageAsBase64();
+        if (imageToSend != null) {
+          print('🖼️ Image ready for upload, length: ${imageToSend.length}');
+        } else {
+          print('⚠️ Image conversion failed, sending null');
+        }
+      }
+
+      // 5️⃣ API call
+      Map<String, dynamic> response;
 
       if (widget.existingEvent != null) {
         // Update existing event
-        final imageBase64 = await _getImageAsBase64();
-        print(
-          '🔄 Updating event with image data: ${imageBase64?.substring(0, 50) ?? "null"}...',
-        );
-
-        // Ensure we never send a local file path
-        String? imageToSend;
-        if (imageBase64 != null && imageBase64.startsWith('data:image/')) {
-          imageToSend = imageBase64;
-          print('✅ Sending base64 image data');
-        } else {
-          imageToSend = null;
-          print('⚠️ No valid image data, sending null');
-        }
-
-        final response = await ApiService.updateEventCard(
+        response = await ApiService.updateEventCard(
           id: widget.existingEvent!.id!,
           adminId: adminId,
           image: imageToSend,
@@ -169,8 +171,7 @@ class _AddEventPageState extends State<AddEventPage> {
           eventdetails: eventDetails,
         );
 
-        final updatedFestival = Festival.fromJson(response['data']['event']);
-
+        final updatedEvent = Festival.fromJson(response['data']['event']);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -178,34 +179,11 @@ class _AddEventPageState extends State<AddEventPage> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context, updatedFestival);
+          Navigator.pop(context, updatedEvent);
         }
       } else {
         // Create new event
-        String? imageToSend;
-
-        // TEMPORARY FIX: Skip image processing to avoid backend HTML error
-        if (_eventImage != null) {
-          print(
-            '🖼️ Image selected but temporarily skipping to avoid backend errors',
-          );
-          print('Event will be created without image until backend is fixed');
-
-          // Show user notification about image issue
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Note: Event will be created without image. Backend needs to be updated to handle images properly.',
-                ),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 4),
-              ),
-            );
-          }
-        }
-
-        final response = await ApiService.createEventCard(
+        response = await ApiService.createEventCard(
           image: imageToSend,
           name: _titleController.text.trim(),
           startdate: _startDate!.toUtc().toIso8601String(),
@@ -216,8 +194,7 @@ class _AddEventPageState extends State<AddEventPage> {
           adminId: adminId,
         );
 
-        final newFestival = Festival.fromJson(response['data']);
-
+        final newEvent = Festival.fromJson(response['data']);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -225,16 +202,14 @@ class _AddEventPageState extends State<AddEventPage> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context, newFestival);
+          Navigator.pop(context, newEvent);
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Failed to save event: ${e.toString().replaceAll('Exception: ', '')}',
-            ),
+            content: Text('Failed to save event: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -251,7 +226,7 @@ class _AddEventPageState extends State<AddEventPage> {
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
+    if (pickedFile != null && mounted) {
       setState(() {
         _eventImage = File(pickedFile.path);
       });
@@ -259,29 +234,48 @@ class _AddEventPageState extends State<AddEventPage> {
   }
 
   void _removeImage() {
-    setState(() {
-      _eventImage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _eventImage = null;
+      });
+    }
   }
 
   Future<String?> _getImageAsBase64() async {
-    if (_eventImage == null) {
-      print('🖼️ No image selected, returning null');
-      return null;
+    if (_eventImage == null) return null;
+
+    final originalBytes = await _eventImage!.readAsBytes();
+    final img.Image? image = img.decodeImage(originalBytes);
+    if (image == null) return null;
+
+    // 1️⃣ Resize large images
+    final maxWidth = 1280;
+    final maxHeight = 720;
+    img.Image resizedImage = image;
+    if (image.width > maxWidth || image.height > maxHeight) {
+      double aspectRatio = image.width / image.height;
+      int newWidth, newHeight;
+
+      if (aspectRatio > 1) {
+        newWidth = maxWidth;
+        newHeight = (maxWidth / aspectRatio).round();
+      } else {
+        newHeight = maxHeight;
+        newWidth = (maxHeight * aspectRatio).round();
+      }
+
+      resizedImage = img.copyResize(image, width: newWidth, height: newHeight);
     }
 
-    try {
-      print('🖼️ Converting image to base64: ${_eventImage!.path}');
-      final bytes = await _eventImage!.readAsBytes();
-      final base64String = base64Encode(bytes);
-      final extension = _eventImage!.path.split('.').last.toLowerCase();
-      final result = 'data:image/$extension;base64,$base64String';
-      print('🖼️ Base64 conversion successful, length: ${result.length}');
-      return result;
-    } catch (e) {
-      print('❌ Error converting image to base64: $e');
-      return null;
-    }
+    // 2️⃣ Compress with reasonable quality
+    final compressedBytes = Uint8List.fromList(
+      img.encodeJpg(resizedImage, quality: 70),
+    );
+
+    // 3️⃣ Convert to base64
+    final base64String = base64Encode(compressedBytes);
+    final extension = _eventImage!.path.split('.').last.toLowerCase();
+    return 'data:image/$extension;base64,$base64String';
   }
 
   void _addDetailField() {

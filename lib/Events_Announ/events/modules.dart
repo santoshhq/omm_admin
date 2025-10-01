@@ -6,7 +6,8 @@ class Festival {
   final double targetAmount;
   final double collectedAmount;
   final List<Donation> donations;
-  final String? imageUrl;
+  final List<String>
+  imagePaths; // Changed to support multiple images like amenities
   final DateTime? startDate;
   final DateTime? endDate;
   final bool isActive;
@@ -20,12 +21,15 @@ class Festival {
     required this.targetAmount,
     this.collectedAmount = 0,
     this.donations = const [],
-    this.imageUrl,
+    this.imagePaths = const [],
     this.startDate,
     this.endDate,
     this.isActive = true,
     this.eventDetails = const [],
   });
+
+  // Helper getter for backward compatibility
+  String? get imageUrl => imagePaths.isNotEmpty ? imagePaths.first : null;
 
   double get progress =>
       targetAmount <= 0 ? 0 : (collectedAmount / targetAmount).clamp(0, 1);
@@ -38,7 +42,7 @@ class Festival {
     double? targetAmount,
     double? collectedAmount,
     List<Donation>? donations,
-    String? imageUrl,
+    List<String>? imagePaths,
     DateTime? startDate,
     DateTime? endDate,
     bool? isActive,
@@ -52,7 +56,7 @@ class Festival {
       targetAmount: targetAmount ?? this.targetAmount,
       collectedAmount: collectedAmount ?? this.collectedAmount,
       donations: donations ?? this.donations,
-      imageUrl: imageUrl ?? this.imageUrl,
+      imagePaths: imagePaths ?? this.imagePaths,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       isActive: isActive ?? this.isActive,
@@ -60,25 +64,34 @@ class Festival {
     );
   }
 
-  /// Helper method to extract first image from various formats
-  static String? _getFirstImage(Map<String, dynamic> json) {
+  /// Helper method to extract images from various formats
+  static List<String> _getImagePaths(Map<String, dynamic> json) {
     // Check for 'images' array first (backend format)
     final images = json['images'];
     if (images is List && images.isNotEmpty) {
-      final firstImage = images.first;
-      if (firstImage is String && firstImage.isNotEmpty) {
-        return firstImage;
-      }
+      return images
+          .where((img) => img is String && img.isNotEmpty)
+          .cast<String>()
+          .toList();
+    }
+
+    // Check for 'imagePaths' array
+    final imagePaths = json['imagePaths'];
+    if (imagePaths is List && imagePaths.isNotEmpty) {
+      return imagePaths
+          .where((img) => img is String && img.isNotEmpty)
+          .cast<String>()
+          .toList();
     }
 
     // Check for single image formats
     final singleImage =
         json['image']?.toString() ?? json['imageUrl']?.toString();
     if (singleImage != null && singleImage.isNotEmpty) {
-      return singleImage;
+      return [singleImage];
     }
 
-    return null;
+    return [];
   }
 
   factory Festival.fromJson(Map<String, dynamic> json) {
@@ -138,7 +151,7 @@ class Festival {
         json['collectedamount'] ?? json['collectedAmount'] ?? 0,
       ),
       donations: donations,
-      imageUrl: _getFirstImage(json),
+      imagePaths: _getImagePaths(json),
       startDate: parseDate(json['startdate'] ?? json['startDate']),
       endDate: parseDate(json['enddate'] ?? json['endDate']),
       isActive: isActive,
@@ -154,7 +167,7 @@ class Festival {
       'collectedamount': collectedAmount,
       'eventdetails': eventDetails,
       'status': isActive,
-      'image': imageUrl,
+      'images': imagePaths,
       'adminId': adminId,
       'startdate': startDate?.toUtc().toIso8601String(),
       'enddate': endDate?.toUtc().toIso8601String(),

@@ -36,6 +36,7 @@ dependencies:
   uuid: ^4.5.1
   http: ^1.5.0
   shared_preferences: ^2.5.3
+  image: ^4.1.7  # For image compression and processing
 
 dev_dependencies:
   flutter_test:

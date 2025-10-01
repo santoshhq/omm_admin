@@ -74,6 +74,51 @@ class ApiService {
     }
   }
 
+  /// Retry logic for handling connection issues
+  static Future<Map<String, dynamic>> _retryRequest(
+    Future<Map<String, dynamic>> Function() request, {
+    int maxRetries = 3,
+  }) async {
+    int attempts = 0;
+    Exception? lastException;
+
+    while (attempts < maxRetries) {
+      try {
+        attempts++;
+        print("🔄 Attempt $attempts of $maxRetries");
+
+        final result = await request();
+        print("✅ Request successful on attempt $attempts");
+        return result;
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        print("❌ Attempt $attempts failed: $e");
+
+        // Don't retry for certain types of errors
+        if (e.toString().contains('404') ||
+            e.toString().contains('401') ||
+            e.toString().contains('403')) {
+          print("🚫 Non-retryable error, throwing immediately");
+          throw lastException;
+        }
+
+        // If this was the last attempt, throw the error
+        if (attempts >= maxRetries) {
+          print("🚫 Max retries ($maxRetries) reached");
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        final waitTime = Duration(seconds: attempts * 2);
+        print("⏳ Waiting ${waitTime.inSeconds} seconds before retry...");
+        await Future.delayed(waitTime);
+      }
+    }
+
+    throw lastException ??
+        Exception("Unknown error after $maxRetries attempts");
+  }
+
   /// Signup
   static Future<Map<String, dynamic>> signup(
     String email,
@@ -1211,17 +1256,19 @@ class ApiService {
       final url = Uri.parse(eventsBaseUrl);
 
       // Convert single image to array format that backend expects
-      List<String>? images;
+      List<String> images = [];
       if (image != null && image.isNotEmpty) {
-        images = [image];
-        print("✅ Converted single image to array format");
+        images.add(image);
       }
 
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Connection": "keep-alive",
+        },
         body: jsonEncode({
-          "images": images, // Changed from "image" to "images" to match backend
+          "images": images, // always an array
           "name": name,
           "startdate": startdate,
           "enddate": enddate,
@@ -1290,13 +1337,34 @@ class ApiService {
       }
     } catch (e) {
       print("🔥 Error creating event card: $e");
+
+      // Handle specific connection issues
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused') ||
           e.toString().contains('Failed host lookup')) {
         throw Exception(
           "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
         );
+      } else if (e.toString().contains(
+        'Connection closed while receiving data',
+      )) {
+        throw Exception(
+          "❌ Connection lost while creating event. This is usually caused by:\n"
+          "• Large image files (>5MB)\n"
+          "• Server timeout settings too low\n"
+          "• Network instability\n\n"
+          "Solutions:\n"
+          "• Use smaller images (<2MB)\n"
+          "• Increase server payload limit to 50mb\n"
+          "• Increase server timeout to 120 seconds\n"
+          "• Check your network connection",
+        );
+      } else if (e.toString().contains('timeout')) {
+        throw Exception(
+          "❌ Request timeout. The server is taking too long to respond. Please try again or use a smaller image.",
+        );
       }
+
       throw Exception("Failed to create event card: $e");
     }
   }
@@ -1304,22 +1372,152 @@ class ApiService {
   /// Get All Event Cards
   static Future<Map<String, dynamic>> getAllEventCards() async {
     try {
-      print("🚀 Fetching all event cards...");
-      print("🌐 URL: $eventsBaseUrl");
-
-      final url = Uri.parse(eventsBaseUrl);
-      final response = await http.get(
-        url,
-        headers: {"Content-Type": "application/json"},
+      // First try the normal request with retry logic
+      return await _retryRequest(
+        () => _getAllEventCardsInternal(),
+        maxRetries: 2,
       );
+    } catch (e) {
+      print("🔄 Normal fetch failed, trying lightweight fetch...");
+
+      // If normal fetch fails, try to get lightweight data (without images)
+      try {
+        return await _getAllEventCardsLightweight();
+      } catch (lightweightError) {
+        print("❌ Both normal and lightweight fetch failed");
+
+        // If it's specifically a connection issue, provide helpful guidance
+        if (e.toString().contains('Connection closed while receiving data')) {
+          throw Exception(
+            "❌ Cannot fetch events due to large image data causing connection timeouts.\n\n"
+            "🔧 IMMEDIATE SOLUTIONS:\n"
+            "1. Backend: Add a lightweight endpoint (/api/events?lightweight=true) that returns events without images\n"
+            "2. Backend: Increase server timeout to 120+ seconds\n"
+            "3. Backend: Increase payload limit to 50MB+\n"
+            "4. Database: Consider storing image URLs instead of base64 data\n\n"
+            "⚡ QUICK FIX: Clear all events with large images from your database and recreate with smaller images (<500KB each)\n\n"
+            "🏗️ Original error: ${e.toString()}",
+          );
+        }
+
+        // Return the original error since it's more detailed
+        throw e;
+      }
+    }
+  }
+
+  /// Get All Event Cards (Lightweight - without images)
+  static Future<Map<String, dynamic>> _getAllEventCardsLightweight() async {
+    print("🚀 Fetching event cards (lightweight mode)...");
+    print("🌐 URL: $eventsBaseUrl?lightweight=true");
+
+    final url = Uri.parse("$eventsBaseUrl?lightweight=true");
+    final response = await http
+        .get(
+          url,
+          headers: {
+            "Content-Type": "application/json",
+            "Connection":
+                "close", // Close connection immediately after response
+          },
+        )
+        .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw Exception("Lightweight request timeout after 30 seconds");
+          },
+        );
+
+    print("📱 Lightweight Response Status: ${response.statusCode}");
+
+    if (response.statusCode == 404) {
+      // If lightweight endpoint doesn't exist, throw error to fallback to original
+      throw Exception("Lightweight endpoint not available");
+    }
+
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && body["success"] == true) {
+      print("✅ Event cards fetched successfully (lightweight)!");
+      final eventCount = body["data"] is List ? body["data"].length : 0;
+      print("📊 Events fetched: $eventCount (without images)");
+
+      // Add a flag to indicate this is lightweight data
+      return {
+        "success": true,
+        "message":
+            "Event cards fetched successfully (lightweight mode - images not included)",
+        "data": body["data"],
+        "isLightweight": true,
+      };
+    } else {
+      throw Exception(
+        body["message"] ?? "Failed to fetch event cards (lightweight)",
+      );
+    }
+  }
+
+  /// Internal method for getting all event cards with retry logic
+  static Future<Map<String, dynamic>> _getAllEventCardsInternal() async {
+    print("🚀 Fetching all event cards...");
+    print("🌐 URL: $eventsBaseUrl");
+
+    final url = Uri.parse(eventsBaseUrl);
+
+    // Create HTTP client with custom settings
+    final client = http.Client();
+
+    try {
+      final request = http.Request('GET', url);
+      request.headers.addAll({
+        "Content-Type": "application/json",
+        "Connection": "keep-alive",
+        "Accept-Encoding": "gzip, deflate",
+        "Cache-Control": "no-cache",
+      });
+
+      // Send request with streaming response to handle large data better
+      final streamedResponse = await client
+          .send(request)
+          .timeout(
+            const Duration(seconds: 90), // Extended timeout
+            onTimeout: () {
+              throw Exception(
+                "Request timeout after 90 seconds. The server might be returning large image data.",
+              );
+            },
+          );
+
+      // Convert streamed response to regular response
+      final response = await http.Response.fromStream(streamedResponse);
 
       print("📱 Get All Events Response Status: ${response.statusCode}");
-      print("📱 Get All Events Response Body: ${response.body}");
+
+      // Log response size to help debug large payloads
+      final responseSizeMB = (response.body.length / 1024 / 1024);
+      print("📊 Response size: ${responseSizeMB.toStringAsFixed(2)} MB");
+
+      if (responseSizeMB > 10) {
+        print(
+          "⚠️ Large response detected. Consider implementing pagination or reducing image sizes.",
+        );
+      }
+
+      // Only log response body if it's not too large
+      if (response.body.length < 1000) {
+        print("📱 Get All Events Response Body: ${response.body}");
+      } else {
+        print(
+          "📱 Get All Events Response Body: [Large response - ${response.body.length} characters]",
+        );
+      }
 
       final body = jsonDecode(response.body);
 
       if (response.statusCode == 200 && body["success"] == true) {
         print("✅ Event cards fetched successfully!");
+        final eventCount = body["data"] is List ? body["data"].length : 0;
+        print("📊 Events fetched: $eventCount");
         return {
           "success": true,
           "message": "Event cards fetched successfully",
@@ -1331,14 +1529,57 @@ class ApiService {
       }
     } catch (e) {
       print("🔥 Error fetching event cards: $e");
+
+      // Handle specific connection issues with detailed solutions
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused') ||
           e.toString().contains('Failed host lookup')) {
         throw Exception(
           "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
         );
+      } else if (e.toString().contains(
+        'Connection closed while receiving data',
+      )) {
+        throw Exception(
+          "❌ Connection lost while fetching events. This is usually caused by:\n"
+          "• Large response with multiple high-resolution images\n"
+          "• Server timeout settings too low\n"
+          "• Network instability\n\n"
+          "Solutions:\n"
+          "• Implement pagination for events\n"
+          "• Reduce image sizes in stored events\n"
+          "• Increase server response timeout to 120 seconds\n"
+          "• Consider returning image thumbnails instead of full images",
+        );
+      } else if (e.toString().contains('timeout')) {
+        throw Exception(
+          "❌ Request timeout. The server is taking too long to respond. This might be due to large image data in events.",
+        );
       }
+
       throw Exception("Failed to fetch event cards: $e");
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Test server connectivity without fetching large data
+  static Future<bool> testServerConnection() async {
+    try {
+      print("🔍 Testing server connection...");
+      final baseUrl = eventsBaseUrl.replaceAll('/api/events', '');
+      final response = await http
+          .get(
+            Uri.parse("$baseUrl/api/health"), // Try health check endpoint
+            headers: {"Content-Type": "application/json"},
+          )
+          .timeout(const Duration(seconds: 10));
+
+      print("📱 Health check response: ${response.statusCode}");
+      return response.statusCode == 200;
+    } catch (e) {
+      print("❌ Server connection test failed: $e");
+      return false;
     }
   }
 
@@ -1350,13 +1591,39 @@ class ApiService {
       print("🌐 URL: $eventsBaseUrl/$id");
 
       final url = Uri.parse("$eventsBaseUrl/$id");
-      final response = await http.get(
-        url,
-        headers: {"Content-Type": "application/json"},
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Connection": "keep-alive",
+            },
+          )
+          .timeout(
+            const Duration(seconds: 30), // Timeout for single event
+            onTimeout: () {
+              throw Exception(
+                "Request timeout after 30 seconds. The event might contain large image data.",
+              );
+            },
+          );
 
       print("📱 Get Event Response Status: ${response.statusCode}");
-      print("📱 Get Event Response Body: ${response.body}");
+
+      // Log response size for debugging
+      final responseSizeMB = (response.body.length / 1024 / 1024);
+      if (responseSizeMB > 1) {
+        print("📊 Response size: ${responseSizeMB.toStringAsFixed(2)} MB");
+      }
+
+      // Only log full response if it's not too large
+      if (response.body.length < 500) {
+        print("📱 Get Event Response Body: ${response.body}");
+      } else {
+        print(
+          "📱 Get Event Response Body: [Large response - ${response.body.length} characters]",
+        );
+      }
 
       final body = jsonDecode(response.body);
 
@@ -1373,13 +1640,26 @@ class ApiService {
       }
     } catch (e) {
       print("🔥 Error fetching event card: $e");
+
+      // Handle specific connection issues
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused') ||
           e.toString().contains('Failed host lookup')) {
         throw Exception(
           "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
         );
+      } else if (e.toString().contains(
+        'Connection closed while receiving data',
+      )) {
+        throw Exception(
+          "❌ Connection lost while fetching event. This might be due to large image data in the event.",
+        );
+      } else if (e.toString().contains('timeout')) {
+        throw Exception(
+          "❌ Request timeout. The event might contain large image data.",
+        );
       }
+
       throw Exception("Failed to fetch event card: $e");
     }
   }
@@ -1405,7 +1685,11 @@ class ApiService {
 
       final Map<String, dynamic> updateData = {"adminId": adminId};
 
-      if (image != null) updateData["image"] = image;
+      if (image != null) {
+        // Convert single image to array format that backend expects
+        updateData["images"] = [image];
+        print("🖼️ Converting single image to array format for backend");
+      }
       if (name != null) updateData["name"] = name;
       if (startdate != null) updateData["startdate"] = startdate;
       if (enddate != null) updateData["enddate"] = enddate;
@@ -1415,11 +1699,27 @@ class ApiService {
       if (status != null) updateData["status"] = status;
 
       final url = Uri.parse("$eventsBaseUrl/$id");
-      final response = await http.put(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(updateData),
-      );
+
+      // Add timeout and better error handling for large payloads
+      final response = await http
+          .put(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Connection": "keep-alive",
+            },
+            body: jsonEncode(updateData),
+          )
+          .timeout(
+            const Duration(
+              seconds: 60,
+            ), // Increased timeout for large image uploads
+            onTimeout: () {
+              throw Exception(
+                "Request timeout after 60 seconds. The image might be too large or server is taking too long to respond. Please try with a smaller image.",
+              );
+            },
+          );
 
       print("📱 Update Event Response Status: ${response.statusCode}");
       print("📱 Update Event Response Body: ${response.body}");
@@ -1439,13 +1739,34 @@ class ApiService {
       }
     } catch (e) {
       print("🔥 Error updating event card: $e");
+
+      // Handle specific connection issues
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused') ||
           e.toString().contains('Failed host lookup')) {
         throw Exception(
           "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
         );
+      } else if (e.toString().contains(
+        'Connection closed while receiving data',
+      )) {
+        throw Exception(
+          "❌ Connection lost while updating event. This is usually caused by:\n"
+          "• Large image files (>5MB)\n"
+          "• Server timeout settings too low\n"
+          "• Network instability\n\n"
+          "Solutions:\n"
+          "• Use smaller images (<2MB)\n"
+          "• Increase server payload limit to 50mb\n"
+          "• Increase server timeout to 120 seconds\n"
+          "• Check your network connection",
+        );
+      } else if (e.toString().contains('timeout')) {
+        throw Exception(
+          "❌ Request timeout. The server is taking too long to respond. Please try again or use a smaller image.",
+        );
       }
+
       throw Exception("Failed to update event card: $e");
     }
   }

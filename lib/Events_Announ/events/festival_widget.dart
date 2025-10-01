@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'modules.dart';
@@ -76,6 +77,14 @@ class FestivalContentState extends State<FestivalContent> {
   List<Festival> festivals = [];
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isDisposed = false;
+
+  /// Safe setState that checks if widget is still mounted and not disposed
+  void _safeSetState(VoidCallback fn) {
+    if (mounted && !_isDisposed) {
+      setState(fn);
+    }
+  }
 
   @override
   void initState() {
@@ -83,22 +92,34 @@ class FestivalContentState extends State<FestivalContent> {
     _loadEvents();
   }
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
   Future<void> _loadEvents() async {
+    if (_isDisposed) return;
+
     try {
-      setState(() {
+      _safeSetState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
       final response = await ApiService.getAllEventCards();
+
+      // Check again after the async call
+      if (_isDisposed || !mounted) return;
+
       final List<dynamic> eventData = response['data'] ?? [];
 
-      setState(() {
+      _safeSetState(() {
         festivals = eventData.map((json) => Festival.fromJson(json)).toList();
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
+      _safeSetState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
@@ -174,7 +195,7 @@ class FestivalContentState extends State<FestivalContent> {
   }
 
   Future<void> _toggleEventStatus(Festival festival) async {
-    if (festival.id == null) return;
+    if (festival.id == null || _isDisposed) return;
 
     try {
       // Optimistic update
@@ -185,7 +206,7 @@ class FestivalContentState extends State<FestivalContent> {
         return f;
       }).toList();
 
-      setState(() {
+      _safeSetState(() {
         festivals = updatedFestivals;
       });
 
@@ -293,10 +314,9 @@ class FestivalContentState extends State<FestivalContent> {
 
                         final double progress = (fest.targetAmount != 0)
                             ? (fest.collectedAmount / fest.targetAmount).clamp(
-                                    0.0,
-                                    1.0,
-                                  )
-                                  as double
+                                0.0,
+                                1.0,
+                              )
                             : 0.0;
 
                         return Slidable(
@@ -579,25 +599,74 @@ class FestivalContentState extends State<FestivalContent> {
   /// Simple placeholder image widget for festival.
   /// Avoids referencing fields that may or may not exist in `Festival`.
   Widget _buildEventImageWidget(Festival fest) {
-    final String? imageUrl =
-        fest.imageUrl; // <-- Ensure your Festival model has this field
-
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-      return Image.network(
-        imageUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          // Fallback if image fails to load
-          return const Icon(
-            Icons.image_not_supported,
-            size: 32,
-            color: Colors.grey,
-          );
-        },
+    // Use first image from imagePaths array
+    if (fest.imagePaths.isEmpty) {
+      return Icon(
+        Icons.celebration,
+        size: 30,
+        color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
       );
-    } else {
-      // Show fallback icon when image is null
-      return const Icon(Icons.image, size: 32, color: Colors.deepOrange);
     }
+
+    final String imagePath = fest.imagePaths.first;
+
+    // Handle base64 images
+    if (imagePath.startsWith('data:image')) {
+      try {
+        final base64String = imagePath.split(',')[1];
+        final bytes = base64.decode(base64String);
+        return Image.memory(
+          bytes,
+          width: 60,
+          height: 60,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              Icons.celebration,
+              size: 30,
+              color: fest.isActive
+                  ? Colors.deepOrange
+                  : const Color(0xFF455A64),
+            );
+          },
+        );
+      } catch (e) {
+        return Icon(
+          Icons.celebration,
+          size: 30,
+          color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+        );
+      }
+    }
+
+    // Handle network images
+    return Image.network(
+      imagePath,
+      width: 60,
+      height: 60,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Icon(
+          Icons.celebration,
+          size: 30,
+          color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+        );
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          width: 60,
+          height: 60,
+          child: Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
