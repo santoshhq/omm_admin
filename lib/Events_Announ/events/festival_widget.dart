@@ -86,6 +86,15 @@ class FestivalContentState extends State<FestivalContent> {
     }
   }
 
+  /// Sort events: active events first, inactive events at bottom
+  void _sortEvents() {
+    festivals.sort((a, b) {
+      if (a.isActive && !b.isActive) return -1; // a comes before b
+      if (!a.isActive && b.isActive) return 1; // b comes before a
+      return 0; // keep original order for same status
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +125,7 @@ class FestivalContentState extends State<FestivalContent> {
 
       _safeSetState(() {
         festivals = eventData.map((json) => Festival.fromJson(json)).toList();
+        _sortEvents(); // Sort events: active first, inactive at bottom
         _isLoading = false;
       });
     } catch (e) {
@@ -165,7 +175,11 @@ class FestivalContentState extends State<FestivalContent> {
 
       if (confirmed == true) {
         await ApiService.deleteEventCard(festival.id!);
-        await _loadEvents(); // Refresh from backend
+
+        // Remove the item from local list instead of refreshing entire list
+        _safeSetState(() {
+          festivals.removeAt(index);
+        });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -208,6 +222,7 @@ class FestivalContentState extends State<FestivalContent> {
 
       _safeSetState(() {
         festivals = updatedFestivals;
+        _sortEvents(); // Sort events immediately: active first, inactive at bottom
       });
 
       // API call
@@ -307,56 +322,59 @@ class FestivalContentState extends State<FestivalContent> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: festivals.length,
-                      itemBuilder: (context, index) {
-                        final fest = festivals[index];
+                    child: SlidableAutoCloseBehavior(
+                      child: ListView.builder(
+                        itemCount: festivals.length,
+                        itemBuilder: (context, index) {
+                          final fest = festivals[index];
 
-                        final double progress = (fest.targetAmount != 0)
-                            ? (fest.collectedAmount / fest.targetAmount).clamp(
-                                0.0,
-                                1.0,
-                              )
-                            : 0.0;
+                          final double progress = (fest.targetAmount != 0)
+                              ? (fest.collectedAmount / fest.targetAmount)
+                                    .clamp(0.0, 1.0)
+                              : 0.0;
 
-                        return Slidable(
-                          key: ValueKey(fest.name),
-                          closeOnScroll: true,
-                          endActionPane: ActionPane(
-                            motion: const DrawerMotion(),
-                            extentRatio:
-                                0.4, // controls how much space the actions take
-                            children: [
-                              SlidableAction(
-                                onPressed: (ctx) => _editEvent(index),
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                icon: Icons.edit,
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(16),
-                                  bottomLeft: Radius.circular(16),
+                          return Slidable(
+                            key: ValueKey('${fest.name}_$index'),
+                            groupTag:
+                                'festival_group', // Ensures only one slidable is open at a time
+                            closeOnScroll: true,
+                            startActionPane: null, // Disable left swipe
+                            endActionPane: ActionPane(
+                              motion: const DrawerMotion(),
+                              extentRatio:
+                                  0.4, // controls how much space the actions take
+                              children: [
+                                SlidableAction(
+                                  onPressed: (ctx) => _editEvent(index),
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  icon: Icons.edit,
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    bottomLeft: Radius.circular(16),
+                                  ),
                                 ),
-                              ),
-                              SlidableAction(
-                                onPressed: (ctx) => _deleteEvent(index),
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                icon: Icons.delete,
-                                borderRadius: const BorderRadius.only(
-                                  topRight: Radius.circular(16),
-                                  bottomRight: Radius.circular(16),
+                                SlidableAction(
+                                  onPressed: (ctx) => _deleteEvent(index),
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  icon: Icons.delete,
+                                  borderRadius: const BorderRadius.only(
+                                    topRight: Radius.circular(16),
+                                    bottomRight: Radius.circular(16),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          child: _buildEventImage(
-                            fest,
-                            progress,
-                            index,
-                            context,
-                          ),
-                        );
-                      },
+                              ],
+                            ),
+                            child: _buildEventImage(
+                              fest,
+                              progress,
+                              index,
+                              context,
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -570,7 +588,7 @@ class FestivalContentState extends State<FestivalContent> {
                     minHeight: 8,
                     backgroundColor: Colors.white.withOpacity(0.3),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      fest.isActive ? Colors.greenAccent : Colors.grey,
+                      fest.isActive ? Colors.greenAccent : Colors.white,
                     ),
                   ),
                 ),
