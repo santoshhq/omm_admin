@@ -19,6 +19,69 @@ class _ComplaintDetailPageState extends State<ComplaintDetailPage> {
   // conversation messages: each message has sender: 'admin'|'user', text and time
   late List<Map<String, dynamic>> _messages;
 
+  // Helper method to get status icon
+  IconData _getStatusIcon(ComplaintStatus status) {
+    switch (status) {
+      case ComplaintStatus.pending:
+        return Icons.access_time;
+      case ComplaintStatus.unsolved:
+        return Icons.error_outline;
+      case ComplaintStatus.solved:
+        return Icons.check_circle;
+    }
+  }
+
+  // Method to show status change dialog
+  void _showStatusChangeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Change Status',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: ComplaintStatus.values.map((status) {
+              return ListTile(
+                leading: Icon(_getStatusIcon(status), color: status.color),
+                title: Text(
+                  status.displayName,
+                  style: GoogleFonts.poppins(
+                    color: status.color,
+                    fontWeight: widget.complaint.status == status
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+                trailing: widget.complaint.status == status
+                    ? Icon(Icons.check, color: status.color)
+                    : null,
+                onTap: () {
+                  setState(() {
+                    widget.complaint.status = status;
+                  });
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Status updated to ${status.displayName}',
+                        style: GoogleFonts.poppins(),
+                      ),
+                      backgroundColor: status.color,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _replyController.dispose();
@@ -170,6 +233,74 @@ class _ComplaintDetailPageState extends State<ComplaintDetailPage> {
                           height: 1.5,
                           color: Colors.grey[800],
                         ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      /// Status Section
+                      Row(
+                        children: [
+                          Text(
+                            'Status: ',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => _showStatusChangeDialog(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.status.color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: c.status.color.withOpacity(0.3),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _getStatusIcon(c.status),
+                                    size: 16,
+                                    color: c.status.color,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    c.status.displayName,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: c.status.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => _showStatusChangeDialog(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Icon(
+                                Icons.edit,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

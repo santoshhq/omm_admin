@@ -453,7 +453,7 @@ class AnnouncementContentState extends State<AnnouncementContent> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: announcement.isActive ? Colors.white : Colors.grey[100],
+        color: announcement.isActive ? Colors.blue.shade50 : Colors.grey[100],
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
