@@ -2246,4 +2246,412 @@ class ApiService {
       throw Exception("Failed to fetch announcements by priority: $e");
     }
   }
+
+  // ===== COMPLAINTS API METHODS =====
+
+  /// Dynamic base URL for complaints based on platform
+  static String get complaintsBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/complaints";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/complaints";
+    } else {
+      return "http://localhost:8080/api/complaints";
+    }
+  }
+
+  /// Create a new complaint
+  static Future<Map<String, dynamic>> createComplaint({
+    required String userId,
+    required String createdByadmin,
+    required String title,
+    required String description,
+  }) async {
+    try {
+      print("\n📝 Creating new complaint...");
+      print("👤 User ID: $userId");
+      print("🔑 Admin ID: $createdByadmin");
+      print("📋 Title: $title");
+
+      final response = await http.post(
+        Uri.parse('$complaintsBaseUrl/create'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "userId": userId,
+          "createdByadmin": createdByadmin,
+          "title": title,
+          "description": description,
+        }),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && body["success"] == true) {
+        print("✅ Complaint created successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Create complaint failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to create complaint");
+      }
+    } catch (e) {
+      print("🔥 Error creating complaint: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to create complaint: $e");
+    }
+  }
+
+  /// Get all complaints for an admin
+  static Future<Map<String, dynamic>> getAdminComplaints(
+    String adminId, {
+    String? status,
+  }) async {
+    try {
+      print("\n📋 Fetching admin complaints...");
+      print("🔑 Admin ID: $adminId");
+      print("🔍 Status filter: $status");
+
+      String url = '$complaintsBaseUrl/admin/$adminId';
+      if (status != null && status.isNotEmpty) {
+        url += '?status=$status';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print(
+          "✅ Admin complaints fetched successfully! Count: ${body["data"]?.length ?? 0}",
+        );
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"] ?? [],
+          "count": body["count"] ?? 0,
+        };
+      } else {
+        print("❌ Fetch admin complaints failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch admin complaints");
+      }
+    } catch (e) {
+      print("🔥 Error fetching admin complaints: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch admin complaints: $e");
+    }
+  }
+
+  /// Get complaint details with messages
+  static Future<Map<String, dynamic>> getComplaintDetails(
+    String complaintId,
+  ) async {
+    try {
+      print("\n🔍 Fetching complaint details...");
+      print("📝 Complaint ID: $complaintId");
+
+      final response = await http.get(
+        Uri.parse('$complaintsBaseUrl/$complaintId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Complaint details fetched successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Fetch complaint details failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch complaint details");
+      }
+    } catch (e) {
+      print("🔥 Error fetching complaint details: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch complaint details: $e");
+    }
+  }
+
+  /// Update complaint status
+  static Future<Map<String, dynamic>> updateComplaintStatus({
+    required String complaintId,
+    required String status,
+    required String adminId,
+  }) async {
+    try {
+      print("\n✏️ Updating complaint status...");
+      print("📝 Complaint ID: $complaintId");
+      print("📊 New Status: $status");
+      print("🔑 Admin ID: $adminId");
+
+      final response = await http.put(
+        Uri.parse('$complaintsBaseUrl/status/$complaintId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"status": status, "adminId": adminId}),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Complaint status updated successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Update complaint status failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to update complaint status");
+      }
+    } catch (e) {
+      print("🔥 Error updating complaint status: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to update complaint status: $e");
+    }
+  }
+
+  /// Delete complaint
+  static Future<Map<String, dynamic>> deleteComplaint(
+    String complaintId,
+  ) async {
+    try {
+      print("\n🗑️ Deleting complaint...");
+      print("📝 Complaint ID: $complaintId");
+
+      final response = await http.delete(
+        Uri.parse('$complaintsBaseUrl/$complaintId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Complaint deleted successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Delete complaint failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to delete complaint");
+      }
+    } catch (e) {
+      print("🔥 Error deleting complaint: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to delete complaint: $e");
+    }
+  }
+
+  // ===== MESSAGES API METHODS =====
+
+  /// Dynamic base URL for messages based on platform
+  static String get messagesBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/messages";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/messages";
+    } else {
+      return "http://localhost:8080/api/messages";
+    }
+  }
+
+  /// Send a message to a complaint
+  static Future<Map<String, dynamic>> sendMessage({
+    required String complaintId,
+    required String senderId,
+    required String message,
+  }) async {
+    try {
+      print("\n💬 Sending message...");
+      print("📝 Complaint ID: $complaintId");
+      print("👤 Sender ID: $senderId");
+      print(
+        "💬 Message: ${message.substring(0, message.length > 50 ? 50 : message.length)}...",
+      );
+
+      final response = await http.post(
+        Uri.parse('$messagesBaseUrl/send'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "complaintId": complaintId,
+          "senderId": senderId,
+          "message": message,
+        }),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && body["success"] == true) {
+        print("✅ Message sent successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Send message failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to send message");
+      }
+    } catch (e) {
+      print("🔥 Error sending message: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to send message: $e");
+    }
+  }
+
+  /// Get messages for a complaint
+  static Future<Map<String, dynamic>> getMessagesByComplaint(
+    String complaintId,
+  ) async {
+    try {
+      print("\n📨 Fetching messages for complaint: $complaintId");
+
+      final response = await http.get(
+        Uri.parse('$messagesBaseUrl/complaint/$complaintId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print(
+          "✅ Messages fetched successfully! Count: ${body["data"]?.length ?? 0}",
+        );
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"] ?? [],
+        };
+      } else {
+        print("❌ Fetch messages failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to fetch messages");
+      }
+    } catch (e) {
+      print("🔥 Error fetching messages: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to fetch messages: $e");
+    }
+  }
+
+  /// Delete a message
+  static Future<Map<String, dynamic>> deleteMessage({
+    required String messageId,
+    required String adminId,
+    required bool deleteForEveryone,
+  }) async {
+    try {
+      print("\n🗑️ Deleting message...");
+      print("📝 Message ID: $messageId");
+      print("👤 Admin ID: $adminId");
+      print("🌍 Delete for everyone: $deleteForEveryone");
+
+      final response = await http.delete(
+        Uri.parse('$messagesBaseUrl/$messageId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "adminId": adminId,
+          "deleteForEveryone": deleteForEveryone,
+        }),
+      );
+
+      print("📡 Response status: ${response.statusCode}");
+      print("📄 Response body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Message deleted successfully!");
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        print("❌ Delete message failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to delete message");
+      }
+    } catch (e) {
+      print("🔥 Error deleting message: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to delete message: $e");
+    }
+  }
 }

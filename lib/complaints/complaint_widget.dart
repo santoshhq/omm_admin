@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:omm_admin/complaints/complaint_module.dart';
 import 'package:omm_admin/complaints/complaint_detail_widget.dart';
+import 'package:omm_admin/complaints/complaint_service.dart';
+import 'package:omm_admin/complaints/whatsapp_message_widget.dart';
 
 class ComplaintPage extends StatefulWidget {
   const ComplaintPage({super.key});
@@ -13,6 +15,9 @@ class ComplaintPage extends StatefulWidget {
 class _ComplaintPageState extends State<ComplaintPage> {
   final TextEditingController _searchController = TextEditingController();
   List<Complaint> _filteredComplaints = [];
+  List<Complaint> _complaints = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void dispose() {
@@ -96,49 +101,39 @@ class _ComplaintPageState extends State<ComplaintPage> {
     );
   }
 
-  // 🔹 Sample data (later replace with Firebase fetch)
-  List<Complaint> _complaints = [
-    Complaint(
-      title: "Water Leakage",
-      description: "Leakage in basement, bathrooms, tanks, others…",
-      reporter: "Flat 302 - Mr. Ramesh",
-      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-      status: ComplaintStatus.solved,
-    ),
-    Complaint(
-      title: "Power Issue",
-      description: "Frequent power cuts, voltage issues, wiring faults…",
-      reporter: "Flat 104 - Mrs. Kavya",
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      status: ComplaintStatus.unsolved,
-    ),
-    Complaint(
-      title: "Cleaning",
-      description: "Garbage left in corridor, pest control needed…",
-      reporter: "Flat 210 - Mr. Arjun",
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      status: ComplaintStatus.pending,
-    ),
-    Complaint(
-      title: "Lift Maintenance",
-      description: "Lift making strange noises, needs immediate attention…",
-      reporter: "Flat 501 - Ms. Priya",
-      createdAt: DateTime.now().subtract(const Duration(hours: 6)),
-      status: ComplaintStatus.unsolved,
-    ),
-    Complaint(
-      title: "Parking Space",
-      description: "Unauthorized vehicle blocking designated parking…",
-      reporter: "Flat 103 - Mr. Kumar",
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      status: ComplaintStatus.solved,
-    ),
-  ];
+  // Load complaints from backend
+  Future<void> _loadComplaints({String? status}) async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      print('📋 Loading complaints from backend...');
+      final complaints = await ComplaintService.getAdminComplaints(
+        status: status,
+      );
+
+      print('✅ Loaded ${complaints.length} complaints');
+
+      setState(() {
+        _complaints = complaints;
+        _isLoading = false;
+        _filterComplaints();
+      });
+    } catch (e) {
+      print('❌ Error loading complaints: $e');
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _filteredComplaints = _complaints;
+    _loadComplaints(); // Load complaints from backend
     _searchController.addListener(() {
       _filterComplaints();
       setState(() {}); // Rebuild to show/hide clear button
@@ -216,7 +211,44 @@ class _ComplaintPageState extends State<ComplaintPage> {
           ),
           // Content Area
           Expanded(
-            child: _filteredComplaints.isEmpty
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Error loading complaints',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _error!,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadComplaints,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : _filteredComplaints.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -374,16 +406,74 @@ class _ComplaintPageState extends State<ComplaintPage> {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 8),
+                              // Action buttons
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => ComplaintDetailPage(
+                                              complaint: c,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.info_outline,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Details'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue[50],
+                                        foregroundColor: Colors.blue[700],
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => WhatsAppChatScreen(
+                                              complaintId: c.id!,
+                                              complaintTitle: c.title,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.chat_bubble_outline,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Chat'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF25D366,
+                                        ).withOpacity(0.1),
+                                        foregroundColor: const Color(
+                                          0xFF25D366,
+                                        ),
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ComplaintDetailPage(complaint: c),
-                              ),
-                            );
-                          },
+                          onTap:
+                              null, // Removed onTap since we have buttons now
                         ),
                       );
                     },
