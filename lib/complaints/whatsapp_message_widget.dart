@@ -5,50 +5,115 @@ import '../utils/ist_time_util.dart';
 import 'complaint_module.dart';
 import 'complaint_service.dart';
 
-class WhatsAppMessageWidget extends StatelessWidget {
+class WhatsAppMessageWidget extends StatefulWidget {
   final Message message;
   final bool isAdmin;
   final VoidCallback? onLongPress;
+  final int? animationDelay;
 
   const WhatsAppMessageWidget({
     Key? key,
     required this.message,
     required this.isAdmin,
     this.onLongPress,
+    this.animationDelay,
   }) : super(key: key);
 
   @override
+  State<WhatsAppMessageWidget> createState() => _WhatsAppMessageWidgetState();
+}
+
+class _WhatsAppMessageWidgetState extends State<WhatsAppMessageWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _slideAnimation =
+        Tween<Offset>(
+          begin: Offset(widget.isAdmin ? 0.3 : -0.3, 0.0),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutBack,
+          ),
+        );
+
+    // Start animation with optional delay
+    if (widget.animationDelay != null && widget.animationDelay! > 0) {
+      Future.delayed(Duration(milliseconds: widget.animationDelay!), () {
+        if (mounted) _animationController.forward();
+      });
+    } else {
+      _animationController.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(position: _slideAnimation, child: child),
+        );
+      },
+      child: _buildMessageContainer(context),
+    );
+  }
+
+  Widget _buildMessageContainer(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
       child: Row(
-        mainAxisAlignment: isAdmin
+        mainAxisAlignment: widget.isAdmin
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isAdmin) _buildAvatar(),
-          if (!isAdmin) const SizedBox(width: 8.0),
+          if (!widget.isAdmin) _buildAvatar(),
+          if (!widget.isAdmin) const SizedBox(width: 8.0),
           Flexible(
             child: Container(
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
               child: GestureDetector(
-                onLongPress: onLongPress,
+                onLongPress: widget.onLongPress,
                 child: Container(
                   padding: const EdgeInsets.all(12.0),
                   decoration: BoxDecoration(
-                    color: isAdmin
+                    color: widget.isAdmin
                         ? const Color(0xFF25D366) // WhatsApp green for admin
                         : Colors.grey[200], // Light grey for users
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(20),
                       topRight: const Radius.circular(20),
-                      bottomLeft: isAdmin
+                      bottomLeft: widget.isAdmin
                           ? const Radius.circular(20)
                           : const Radius.circular(4),
-                      bottomRight: isAdmin
+                      bottomRight: widget.isAdmin
                           ? const Radius.circular(4)
                           : const Radius.circular(20),
                     ),
@@ -64,12 +129,15 @@ class WhatsAppMessageWidget extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (!isAdmin) _buildSenderInfo() else _buildAdminInfo(),
+                      if (!widget.isAdmin)
+                        _buildSenderInfo()
+                      else
+                        _buildAdminInfo(),
                       const SizedBox(height: 4.0),
                       Text(
-                        message.message,
+                        widget.message.message,
                         style: TextStyle(
-                          color: isAdmin ? Colors.white : Colors.black87,
+                          color: widget.isAdmin ? Colors.white : Colors.black87,
                           fontSize: 16.0,
                         ),
                       ),
@@ -79,15 +147,15 @@ class WhatsAppMessageWidget extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Text(
-                            message.formatTimestampIST(),
+                            widget.message.formatTimestampIST(),
                             style: TextStyle(
-                              color: isAdmin
+                              color: widget.isAdmin
                                   ? Colors.white70
                                   : Colors.grey[600],
                               fontSize: 12.0,
                             ),
                           ),
-                          if (isAdmin) ...[
+                          if (widget.isAdmin) ...[
                             const SizedBox(width: 4.0),
                             Icon(
                               Icons.done_all,
@@ -103,8 +171,8 @@ class WhatsAppMessageWidget extends StatelessWidget {
               ),
             ),
           ),
-          if (isAdmin) const SizedBox(width: 8.0),
-          if (isAdmin) _buildAvatar(),
+          if (widget.isAdmin) const SizedBox(width: 8.0),
+          if (widget.isAdmin) _buildAvatar(),
         ],
       ),
     );
@@ -113,15 +181,15 @@ class WhatsAppMessageWidget extends StatelessWidget {
   Widget _buildAvatar() {
     return CircleAvatar(
       radius: 20,
-      backgroundColor: isAdmin
+      backgroundColor: widget.isAdmin
           ? const Color(0xFF455A64) // WhatsApp dark green for admin
           : Colors.blue[600], // Blue for members
       child: Text(
-        isAdmin ? 'ADMIN' : _getInitials(),
+        widget.isAdmin ? 'ADMIN' : _getInitials(),
         style: TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: isAdmin ? 8 : 16,
+          fontSize: widget.isAdmin ? 8 : 16,
         ),
       ),
     );
@@ -134,16 +202,16 @@ class WhatsAppMessageWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            message.senderName,
+            widget.message.senderName,
             style: TextStyle(
               color: Colors.blue[700],
               fontWeight: FontWeight.bold,
               fontSize: 14.0,
             ),
           ),
-          if (message.senderFlat != 'N/A')
+          if (widget.message.senderFlat != 'N/A')
             Text(
-              'Flat ${message.senderFlat}',
+              'Flat ${widget.message.senderFlat}',
               style: TextStyle(
                 color: Colors.grey[600],
                 fontSize: 12.0,
@@ -170,7 +238,7 @@ class WhatsAppMessageWidget extends StatelessWidget {
   }
 
   String _getInitials() {
-    final name = message.senderName;
+    final name = widget.message.senderName;
     if (name.isEmpty) return 'U';
 
     final parts = name.split(' ');
@@ -519,41 +587,91 @@ class _ComplaintDetailsHeaderState extends State<ComplaintDetailsHeader> {
 }
 
 // Date header widget for chat like WhatsApp
-class DateHeaderWidget extends StatelessWidget {
+class DateHeaderWidget extends StatefulWidget {
   final DateTime date;
 
   const DateHeaderWidget({Key? key, required this.date}) : super(key: key);
 
   @override
+  State<DateHeaderWidget> createState() => _DateHeaderWidgetState();
+}
+
+class _DateHeaderWidgetState extends State<DateHeaderWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12.0),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-          decoration: BoxDecoration(
-            color: const Color(
-              0xFFDCF8C6,
-            ).withOpacity(0.3), // Light WhatsApp green
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                offset: const Offset(0, 1),
-                blurRadius: 2,
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 6.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFFDCF8C6,
+                    ).withOpacity(0.3), // Light WhatsApp green
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        offset: const Offset(0, 1),
+                        blurRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    ISTTimeUtil.formatDateHeader(widget.date),
+                    style: const TextStyle(
+                      color: Color(0xFF128C7E), // WhatsApp green
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: Text(
-            ISTTimeUtil.formatDateHeader(date),
-            style: const TextStyle(
-              color: Color(0xFF128C7E), // WhatsApp green
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -653,12 +771,18 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
         widget.complaintId,
       );
 
+      // Add a small delay for smoother transition
+      await Future.delayed(const Duration(milliseconds: 300));
+
       if (mounted) {
         setState(() {
           _messages = messages;
           _chatItems = _buildChatItemsWithDateHeaders(messages);
           _isLoading = false;
         });
+
+        // Small delay before scrolling for better animation timing
+        await Future.delayed(const Duration(milliseconds: 100));
 
         // Scroll to bottom after initial load
         if (messages.isNotEmpty) {
@@ -983,7 +1107,7 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
                 ),
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? _buildLoadingState()
                     : _messages.isEmpty
                     ? Center(
                         child: Column(
@@ -1032,9 +1156,19 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
                             '💬 Message $index: "${message.message.substring(0, message.message.length > 20 ? 20 : message.message.length)}..." - Sender: ${message.senderId} - ${isAdmin ? 'ADMIN (RIGHT)' : 'MEMBER (LEFT)'}',
                           );
 
+                          // Calculate staggered animation delay for smooth loading
+                          final messageIndex = _chatItems
+                              .where((item) => item is Message)
+                              .toList()
+                              .indexOf(message);
+                          final animationDelay = messageIndex < 10
+                              ? messageIndex * 50
+                              : 0; // Only animate first 10 messages
+
                           return WhatsAppMessageWidget(
                             message: message,
                             isAdmin: isAdmin,
+                            animationDelay: animationDelay,
                             onLongPress: () {
                               // TODO: Add message options (delete, copy, etc.)
                             },
@@ -1045,20 +1179,102 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
               _buildMessageInput(),
             ],
           ),
-          // Floating scroll to bottom button
-          if (_showScrollToBottomButton)
-            Positioned(
-              bottom: 80,
-              right: 16,
-              child: FloatingActionButton.small(
-                onPressed: _scrollToBottomWithAnimation,
-                backgroundColor: const Color(0xFF25D366),
-                child: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.white,
+          // Floating scroll to bottom button with animation
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            bottom: _showScrollToBottomButton ? 80 : -60,
+            right: 16,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.elasticOut,
+              scale: _showScrollToBottomButton ? 1.0 : 0.0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _showScrollToBottomButton ? 1.0 : 0.0,
+                child: FloatingActionButton.small(
+                  onPressed: _scrollToBottomWithAnimation,
+                  backgroundColor: const Color(0xFF25D366),
+                  elevation: 4,
+                  child: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Animated loading indicator
+          TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 1000),
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.8 + (value * 0.2),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Color(0xFF25D366).withOpacity(value),
+                  ),
+                  strokeWidth: 3.0,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          // Loading text with fade animation
+          TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 1200),
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: const Text(
+                  'Loading messages...',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          // Animated dots
+          TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 1500),
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(3, (index) {
+                    return AnimatedContainer(
+                      duration: Duration(milliseconds: 300 + (index * 100)),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Color(0xFF25D366).withOpacity(0.6),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
