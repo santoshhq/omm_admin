@@ -19,14 +19,17 @@ class _ComplaintPageState extends State<ComplaintPage> {
   List<Complaint> _filteredComplaints = [];
   List<Complaint> _complaints = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   String? _error;
   Map<String, int> _unreadCounts = {}; // Store unread message counts
   Timer? _unreadCountsRefreshTimer;
+  Timer? _autoRefreshTimer;
 
   @override
   void dispose() {
     _searchController.dispose();
     _unreadCountsRefreshTimer?.cancel();
+    _autoRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -253,13 +256,20 @@ class _ComplaintPageState extends State<ComplaintPage> {
     );
   }
 
-  // Load complaints from backend
-  Future<void> _loadComplaints({String? status}) async {
+  // Load complaints from backend with smooth animations
+  Future<void> _loadComplaints({String? status, bool isRefresh = false}) async {
     try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      if (!isRefresh) {
+        setState(() {
+          _isLoading = true;
+          _error = null;
+        });
+      } else {
+        setState(() {
+          _isRefreshing = true;
+          _error = null;
+        });
+      }
 
       print('📋 Loading complaints from backend...');
       final complaints = await ComplaintService.getAdminComplaints(
@@ -277,19 +287,40 @@ class _ComplaintPageState extends State<ComplaintPage> {
         complaintIds,
       );
 
-      setState(() {
-        _complaints = complaints;
-        _unreadCounts = unreadCounts;
-        _isLoading = false;
-        _filterComplaints();
-      });
+      if (mounted) {
+        setState(() {
+          _complaints = complaints;
+          _unreadCounts = unreadCounts;
+          _isLoading = false;
+          _isRefreshing = false;
+          _filterComplaints();
+        });
+      }
     } catch (e) {
       print('❌ Error loading complaints: $e');
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+      }
     }
+  }
+
+  // Auto refresh complaints every 30 seconds
+  void _startAutoRefresh() {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_isLoading && !_isRefreshing) {
+        print('🔄 Auto-refreshing complaints...');
+        _loadComplaints(isRefresh: true);
+      }
+    });
+  }
+
+  // Manual refresh with pull-to-refresh
+  Future<void> _onRefresh() async {
+    await _loadComplaints(isRefresh: true);
   }
 
   @override
@@ -301,6 +332,7 @@ class _ComplaintPageState extends State<ComplaintPage> {
       setState(() {});
     });
     _startUnreadCountsRefresh();
+    _startAutoRefresh();
   }
 
   void _startUnreadCountsRefresh() {
@@ -358,15 +390,42 @@ class _ComplaintPageState extends State<ComplaintPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
-        title: Text(
-          "Complaints",
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: const Color(0xFF1F2937),
-          ),
+        title: Row(
+          children: [
+            Text(
+              "Complaints",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                color: const Color(0xFF1F2937),
+              ),
+            ),
+            if (_isRefreshing) ...[
+              const SizedBox(width: 12),
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                ),
+              ),
+            ],
+          ],
         ),
         iconTheme: const IconThemeData(color: Color(0xFF1F2937)),
+        actions: [
+          IconButton(
+            onPressed: _isRefreshing
+                ? null
+                : () => _loadComplaints(isRefresh: true),
+            icon: Icon(
+              Icons.refresh,
+              color: _isRefreshing ? Colors.grey : const Color(0xFF4F46E5),
+            ),
+            tooltip: 'Refresh Complaints',
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: Colors.grey.shade200),
@@ -415,236 +474,274 @@ class _ComplaintPageState extends State<ComplaintPage> {
               ),
             ),
           ),
-          // Content Area
+          // Content Area with Pull-to-Refresh
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? _buildSkeletonLoader()
                 : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Error loading complaints',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _error!,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadComplaints,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  )
-                : _filteredComplaints.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _searchController.text.isNotEmpty
-                              ? Icons.search_off
-                              : Icons.report_problem_outlined,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _searchController.text.isNotEmpty
-                              ? "No complaints found"
-                              : "No complaints yet",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _searchController.text.isNotEmpty
-                              ? "Try searching with different keywords"
-                              : "Complaints raised by residents will appear here",
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _filteredComplaints.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      final c = _filteredComplaints[index];
-                      return Card(
-                        elevation: 2,
-                        shadowColor: Colors.black.withOpacity(0.1),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            _showComplaintDetails(context, c);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Header with Title and Status
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        c.title,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF1F2937),
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: c.status.color.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: c.status.color.withOpacity(
-                                            0.3,
-                                          ),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: BoxDecoration(
-                                              color: c.status.color,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            c.status.displayName,
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: c.status.color,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                ? _buildErrorState()
+                : RefreshIndicator(
+                    onRefresh: _onRefresh,
+                    color: const Color(0xFF4F46E5),
+                    backgroundColor: Colors.white,
+                    child: _filteredComplaints.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _filteredComplaints.length,
+                            separatorBuilder: (_, __) =>
                                 const SizedBox(height: 16),
-
-                                // Reporter Info
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.person_outline,
-                                      size: 18,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        c.name,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 15,
-                                          color: const Color(0xFF374151),
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-
-                                // Flat Number
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.home_outlined,
-                                      size: 18,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Flat ${c.flatNo}',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 15,
-                                        color: const Color(0xFF374151),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-
-                                // Bottom Row with Time and Chat Button
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time,
-                                      size: 16,
-                                      color: Color(0xFF9CA3AF),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      ISTTimeUtil.formatMessageTime(
-                                        c.createdAt,
-                                      ),
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 13,
-                                        color: const Color(0xFF9CA3AF),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    _buildChatButtonWithBadge(c),
-                                  ],
-                                ),
-                              ],
-                            ),
+                            itemBuilder: (context, index) {
+                              final c = _filteredComplaints[index];
+                              return _buildComplaintCard(c, index);
+                            },
                           ),
-                        ),
-                      );
-                    },
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Build simple loading indicator
+  Widget _buildSkeletonLoader() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF4F46E5)),
+            SizedBox(height: 16),
+            Text(
+              'Loading complaints...',
+              style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Build error state
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 12),
+          Text(
+            'Error loading complaints',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => _loadComplaints(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4F46E5),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Build empty state
+  Widget _buildEmptyState() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _searchController.text.isNotEmpty
+                    ? Icons.search_off
+                    : Icons.report_problem_outlined,
+                size: 64,
+                color: Colors.grey,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _searchController.text.isNotEmpty
+                    ? "No complaints found"
+                    : "No complaints yet",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _searchController.text.isNotEmpty
+                    ? "Try searching with different keywords"
+                    : "Complaints raised by residents will appear here",
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build individual complaint card - simple and light
+  Widget _buildComplaintCard(Complaint c, int index) {
+    return Card(
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          _showComplaintDetails(context, c);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with Title and Status
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1F2937),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.status.color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: c.status.color.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: c.status.color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          c.status.displayName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: c.status.color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Reporter Info
+              Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    size: 18,
+                    color: Color(0xFF6B7280),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      c.name,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        color: const Color(0xFF374151),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Flat Number
+              Row(
+                children: [
+                  const Icon(
+                    Icons.home_outlined,
+                    size: 18,
+                    color: Color(0xFF6B7280),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Flat ${c.flatNo}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      color: const Color(0xFF374151),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Bottom Row with Time and Chat Button
+              Row(
+                children: [
+                  const Icon(
+                    Icons.access_time,
+                    size: 16,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    ISTTimeUtil.formatMessageTime(c.createdAt),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: const Color(0xFF9CA3AF),
+                    ),
+                  ),
+                  const Spacer(),
+                  _buildChatButtonWithBadge(c),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
