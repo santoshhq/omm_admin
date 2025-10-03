@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import 'package:omm_admin/complaints/complaint_module.dart';
-import 'package:omm_admin/complaints/complaint_detail_widget.dart';
 import 'package:omm_admin/complaints/complaint_service.dart';
 import 'package:omm_admin/complaints/whatsapp_message_widget.dart';
+import '../utils/ist_time_util.dart';
 
 class ComplaintPage extends StatefulWidget {
   const ComplaintPage({super.key});
@@ -18,86 +20,236 @@ class _ComplaintPageState extends State<ComplaintPage> {
   List<Complaint> _complaints = [];
   bool _isLoading = true;
   String? _error;
+  Map<String, int> _unreadCounts = {}; // Store unread message counts
+  Timer? _unreadCountsRefreshTimer;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _unreadCountsRefreshTimer?.cancel();
     super.dispose();
   }
 
-  // Helper method to get status icon
-  IconData _getStatusIcon(ComplaintStatus status) {
-    switch (status) {
-      case ComplaintStatus.pending:
-        return Icons.access_time;
-      case ComplaintStatus.unsolved:
-        return Icons.error_outline;
-      case ComplaintStatus.solved:
-        return Icons.check_circle;
-    }
-  }
-
-  // Method to update complaint status
-  void _updateComplaintStatus(int filteredIndex, ComplaintStatus newStatus) {
-    setState(() {
-      // Find the complaint in the original list
-      final complaint = _filteredComplaints[filteredIndex];
-      final originalIndex = _complaints.indexOf(complaint);
-      if (originalIndex != -1) {
-        _complaints[originalIndex] = _complaints[originalIndex].copyWith(
-          status: newStatus,
-        );
-        _filterComplaints(); // Refresh the filtered list
-      }
-    });
-  }
-
-  // Method to show status change dialog
-  void _showStatusChangeDialog(BuildContext context, int index) {
-    showDialog(
+  // Show detailed complaint information
+  void _showComplaintDetails(BuildContext context, Complaint complaint) {
+    showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            'Change Status',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.8,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: ComplaintStatus.values.map((status) {
-              return ListTile(
-                leading: Icon(_getStatusIcon(status), color: status.color),
-                title: Text(
-                  status.displayName,
-                  style: GoogleFonts.poppins(
-                    color: status.color,
-                    fontWeight: _complaints[index].status == status
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Complaint Details',
+                              style: GoogleFonts.poppins(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1F2937),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(
+                              Icons.close,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Status Badge (Display Only)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: complaint.status.color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(
+                            color: complaint.status.color.withOpacity(0.3),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: complaint.status.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              complaint.status.displayName,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: complaint.status.color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Title
+                      _buildDetailRow('Title', complaint.title),
+                      const SizedBox(height: 20),
+
+                      // Description
+                      _buildDetailRow('Description', complaint.description),
+                      const SizedBox(height: 20),
+
+                      // Reporter Info
+                      _buildDetailRow('Reported By', complaint.name),
+                      const SizedBox(height: 20),
+
+                      // Flat Number
+                      _buildDetailRow('Flat Number', complaint.flatNo),
+                      const SizedBox(height: 20),
+
+                      // Date & Time
+                      _buildDetailRow(
+                        'Submitted On',
+                        '${ISTTimeUtil.formatDateHeader(complaint.createdAt)} at ${ISTTimeUtil.formatMessageTime(complaint.createdAt)}',
+                      ),
+                      const SizedBox(height: 40),
+
+                      // Chat Button
+                      _buildFullWidthChatButton(complaint),
+                      const SizedBox(height: 16), // Add bottom spacing
+                    ],
                   ),
                 ),
-                trailing: _complaints[index].status == status
-                    ? Icon(Icons.check, color: status.color)
-                    : null,
-                onTap: () {
-                  _updateComplaintStatus(index, status);
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Status updated to ${status.displayName}',
-                        style: GoogleFonts.poppins(),
-                      ),
-                      backgroundColor: status.color,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                },
-              );
-            }).toList(),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF6B7280),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            color: const Color(0xFF1F2937),
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatButtonWithBadge(Complaint complaint) {
+    final unreadCount = _unreadCounts[complaint.id] ?? 0;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ElevatedButton.icon(
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => WhatsAppChatScreen(
+                  complaintId: complaint.id!,
+                  complaintTitle: complaint.title,
+                  complaint: complaint,
+                ),
+              ),
+            );
+            // Refresh unread counts when returning from chat
+            _refreshUnreadCounts();
+          },
+          icon: const Icon(Icons.chat_bubble_outline, size: 18),
+          label: const Text('Chat'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF25D366),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+            textStyle: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        // Unread messages badge
+        if (unreadCount > 0)
+          Positioned(
+            right: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+              child: Text(
+                unreadCount > 99 ? '99+' : unreadCount.toString(),
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -116,8 +268,18 @@ class _ComplaintPageState extends State<ComplaintPage> {
 
       print('✅ Loaded ${complaints.length} complaints');
 
+      // Load unread message counts for all complaints
+      final complaintIds = complaints
+          .where((c) => c.id != null)
+          .map((c) => c.id!)
+          .toList();
+      final unreadCounts = await ComplaintService.getUnreadMessagesCounts(
+        complaintIds,
+      );
+
       setState(() {
         _complaints = complaints;
+        _unreadCounts = unreadCounts;
         _isLoading = false;
         _filterComplaints();
       });
@@ -133,10 +295,22 @@ class _ComplaintPageState extends State<ComplaintPage> {
   @override
   void initState() {
     super.initState();
-    _loadComplaints(); // Load complaints from backend
+    _loadComplaints();
     _searchController.addListener(() {
       _filterComplaints();
-      setState(() {}); // Rebuild to show/hide clear button
+      setState(() {});
+    });
+    _startUnreadCountsRefresh();
+  }
+
+  void _startUnreadCountsRefresh() {
+    // Refresh unread counts every 10 seconds
+    _unreadCountsRefreshTimer = Timer.periodic(const Duration(seconds: 10), (
+      timer,
+    ) {
+      if (mounted && !_isLoading) {
+        _refreshUnreadCounts();
+      }
     });
   }
 
@@ -155,19 +329,48 @@ class _ComplaintPageState extends State<ComplaintPage> {
     });
   }
 
+  // Refresh unread message counts
+  Future<void> _refreshUnreadCounts() async {
+    try {
+      final complaintIds = _complaints
+          .where((c) => c.id != null)
+          .map((c) => c.id!)
+          .toList();
+      final unreadCounts = await ComplaintService.getUnreadMessagesCounts(
+        complaintIds,
+      );
+
+      if (mounted) {
+        setState(() {
+          _unreadCounts = unreadCounts;
+        });
+      }
+    } catch (e) {
+      print('❌ Error refreshing unread counts: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 1,
+        elevation: 0,
         centerTitle: false,
         title: Text(
           "Complaints",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: const Color(0xFF1F2937),
+          ),
         ),
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Color(0xFF1F2937)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: Colors.grey.shade200),
+        ),
       ),
       body: Column(
         children: [
@@ -178,15 +381,15 @@ class _ComplaintPageState extends State<ComplaintPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search by title or flat number...',
+                hintText: 'Search by title or reporter name...',
                 hintStyle: GoogleFonts.poppins(
                   fontSize: 14,
                   color: Colors.grey[500],
                 ),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF6B7280)),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        icon: const Icon(Icons.clear, color: Color(0xFF6B7280)),
                         onPressed: () {
                           _searchController.clear();
                         },
@@ -198,7 +401,10 @@ class _ComplaintPageState extends State<ComplaintPage> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.redAccent),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF4F46E5),
+                    width: 2,
+                  ),
                 ),
                 filled: true,
                 fillColor: Colors.grey.shade50,
@@ -266,7 +472,8 @@ class _ComplaintPageState extends State<ComplaintPage> {
                               ? "No complaints found"
                               : "No complaints yet",
                           style: GoogleFonts.poppins(
-                            fontSize: 14,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -276,7 +483,7 @@ class _ComplaintPageState extends State<ComplaintPage> {
                               ? "Try searching with different keywords"
                               : "Complaints raised by residents will appear here",
                           style: GoogleFonts.poppins(
-                            fontSize: 12,
+                            fontSize: 14,
                             color: Colors.grey[500],
                           ),
                         ),
@@ -286,62 +493,49 @@ class _ComplaintPageState extends State<ComplaintPage> {
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _filteredComplaints.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
                     itemBuilder: (context, index) {
                       final c = _filteredComplaints[index];
                       return Card(
-                        elevation: 1,
+                        elevation: 2,
+                        shadowColor: Colors.black.withOpacity(0.1),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: const Color.fromARGB(
-                              255,
-                              255,
-                              73,
-                              73,
-                            ).withOpacity(0.3), // light red border
-                            width: 1.2,
-                          ),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: ListTile(
-                          leading: const Icon(
-                            Icons.report_problem,
-                            color: Colors.redAccent,
-                            size: 28,
-                          ),
-                          title: Text(
-                            c.title,
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                c.description,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              // Status Tag
-                              Row(
-                                children: [
-                                  GestureDetector(
-                                    onLongPress: () =>
-                                        _showStatusChangeDialog(context, index),
-                                    child: Container(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            _showComplaintDetails(context, c);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Header with Title and Status
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        c.title,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF1F2937),
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
+                                        horizontal: 12,
+                                        vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
                                         color: c.status.color.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(20),
                                         border: Border.all(
                                           color: c.status.color.withOpacity(
                                             0.3,
@@ -352,133 +546,180 @@ class _ComplaintPageState extends State<ComplaintPage> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            _getStatusIcon(c.status),
-                                            size: 12,
-                                            color: c.status.color,
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: c.status.color,
+                                              shape: BoxShape.circle,
+                                            ),
                                           ),
-                                          const SizedBox(width: 4),
+                                          const SizedBox(width: 6),
                                           Text(
                                             c.status.displayName,
                                             style: GoogleFonts.poppins(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w500,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
                                               color: c.status.color,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  ),
-                                  const Spacer(),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.person_outline,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      c.reporter,
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Reporter Info
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.person_outline,
+                                      size: 18,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        c.name,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 15,
+                                          color: const Color(0xFF374151),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Flat Number
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.home_outlined,
+                                      size: 18,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Flat ${c.flatNo}',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
+                                        fontSize: 15,
+                                        color: const Color(0xFF374151),
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ),
-                                  const Icon(
-                                    Icons.access_time,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    "${c.createdAt.hour}:${c.createdAt.minute.toString().padLeft(2, '0')}",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Bottom Row with Time and Chat Button
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.access_time,
+                                      size: 16,
+                                      color: Color(0xFF9CA3AF),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Action buttons
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => ComplaintDetailPage(
-                                              complaint: c,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.info_outline,
-                                        size: 16,
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      ISTTimeUtil.formatMessageTime(
+                                        c.createdAt,
                                       ),
-                                      label: const Text('Details'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue[50],
-                                        foregroundColor: Colors.blue[700],
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        color: const Color(0xFF9CA3AF),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => WhatsAppChatScreen(
-                                              complaintId: c.id!,
-                                              complaintTitle: c.title,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.chat_bubble_outline,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Chat'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF25D366,
-                                        ).withOpacity(0.1),
-                                        foregroundColor: const Color(
-                                          0xFF25D366,
-                                        ),
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    const Spacer(),
+                                    _buildChatButtonWithBadge(c),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                          onTap:
-                              null, // Removed onTap since we have buttons now
                         ),
                       );
                     },
                   ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFullWidthChatButton(Complaint complaint) {
+    final unreadCount = _unreadCounts[complaint.id] ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8), // Add margin for badge overflow
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 56, // Fixed height for consistent layout
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => WhatsAppChatScreen(
+                      complaintId: complaint.id!,
+                      complaintTitle: complaint.title,
+                      complaint: complaint,
+                    ),
+                  ),
+                );
+                // Refresh unread counts when returning from chat
+                _refreshUnreadCounts();
+              },
+              icon: const Icon(Icons.chat_bubble_outline, size: 20),
+              label: Text(
+                unreadCount > 0
+                    ? 'Start Chat ($unreadCount new)'
+                    : 'Start Chat',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                foregroundColor: Colors.white,
+                elevation: 2,
+                shadowColor: const Color(0xFF25D366).withOpacity(0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          // Unread messages badge for full width button
+          if (unreadCount > 0)
+            Positioned(
+              right: 12,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                child: Text(
+                  unreadCount > 99 ? '99+' : unreadCount.toString(),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
         ],
       ),
     );

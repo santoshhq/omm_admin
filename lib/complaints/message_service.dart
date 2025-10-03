@@ -1,5 +1,7 @@
 import '../config/api_config.dart';
 import '../services/admin_session_service.dart';
+import '../utils/ist_time_util.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MessageSender {
   final String? id;
@@ -126,6 +128,21 @@ class Message {
       return senderDetails!.displayName;
     }
     return 'Unknown User';
+  }
+
+  // Convert server timestamp to Indian Standard Time (IST)
+  DateTime get timestampIST {
+    return ISTTimeUtil.toIST(timestamp);
+  }
+
+  // Format timestamp for display with IST and detailed date/day info
+  String formatTimestampIST() {
+    return ISTTimeUtil.formatMessageTime(timestamp);
+  }
+
+  // Format timestamp for detailed display
+  String formatDetailedTimestampIST() {
+    return ISTTimeUtil.formatDetailedTime(timestamp);
   }
 
   // Determine if sender is admin by comparing with current admin ID
@@ -311,6 +328,89 @@ class MessageService {
     } catch (e) {
       print('❌ MessageService Error marking message as read: $e');
       return false;
+    }
+  }
+
+  // Mark complaint as read (when admin opens the chat)
+  Future<void> markComplaintAsRead(String complaintId) async {
+    try {
+      print('📖 MessageService: Marking complaint $complaintId as read');
+
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'last_read_$complaintId';
+      final now = DateTime.now().toIso8601String();
+
+      await prefs.setString(key, now);
+      print('✅ MessageService: Marked complaint $complaintId as read at $now');
+    } catch (e) {
+      print('❌ MessageService Error marking complaint as read: $e');
+    }
+  }
+
+  // Get the last time admin read this complaint
+  Future<DateTime?> getLastReadTime(String complaintId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'last_read_$complaintId';
+      final lastReadString = prefs.getString(key);
+
+      if (lastReadString != null) {
+        return DateTime.parse(lastReadString);
+      }
+      return null;
+    } catch (e) {
+      print('❌ MessageService Error getting last read time: $e');
+      return null;
+    }
+  }
+
+  // Get count of unread messages for a complaint
+  Future<int> getUnreadMessagesCount(String complaintId) async {
+    try {
+      print(
+        '🔍 MessageService: Getting unread messages count for complaint: $complaintId',
+      );
+
+      // Get all messages for the complaint
+      final messages = await getMessagesForComplaint(complaintId);
+
+      // Get admin ID to determine which messages are from users (not admin)
+      final adminId = await getAdminId();
+
+      if (adminId == null) {
+        print('⚠️ MessageService: No admin ID found, returning 0 unread count');
+        return 0;
+      }
+
+      // Get the last time admin read this complaint
+      final lastReadTime = await getLastReadTime(complaintId);
+
+      // Count messages that are:
+      // 1. Not from admin (from users)
+      // 2. Newer than the last time admin viewed this complaint
+      final unreadCount = messages.where((message) {
+        // Check if message is not from admin
+        final isFromUser = !message.isAdminMessage(adminId);
+
+        if (!isFromUser) return false; // Skip admin messages
+
+        // If no last read time, all user messages are unread
+        if (lastReadTime == null) return true;
+
+        // Check if message is newer than last read time
+        final messageTime = message.timestamp;
+        final isNewer = messageTime.isAfter(lastReadTime);
+
+        return isNewer;
+      }).length;
+
+      print(
+        '✅ MessageService: Found $unreadCount unread messages (last read: $lastReadTime)',
+      );
+      return unreadCount;
+    } catch (e) {
+      print('❌ MessageService Error getting unread count: $e');
+      return 0;
     }
   }
 }

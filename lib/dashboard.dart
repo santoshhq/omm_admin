@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 //import 'package:omm_admin/Amenities_booking/amenities_admin_widget.dart';
 import 'package:omm_admin/Amenities_booking/booking_amenitis.dart';
 
 import 'package:omm_admin/bills_managements/bill_page.dart';
-// import 'package:omm_admin/bills_managements/bll_card.dart'; // not used here
 import 'package:omm_admin/complaints/complaint_widget.dart';
+import 'package:omm_admin/complaints/complaint_service.dart';
+import 'package:omm_admin/complaints/complaint_module.dart';
+// import 'package:omm_admin/bills_managements/bll_card.dart'; // not used here
 import 'package:omm_admin/security_guards/security_dashboard.dart';
 import 'package:omm_admin/admin_info/admin_info_form_module.dart';
 
@@ -78,17 +81,29 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   String _apartmentName = "Loading...";
+  int _pendingComplaintsCount = 0;
+  bool _isLoadingComplaints = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadApartmentName();
+    _loadPendingComplaintsCount();
     adminInfoModel.addListener(_onAdminInfoChanged);
+
+    // Refresh complaints count every 30 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadPendingComplaintsCount();
+      }
+    });
   }
 
   @override
   void dispose() {
     adminInfoModel.removeListener(_onAdminInfoChanged);
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -117,6 +132,35 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         setState(() {
           _apartmentName = "Omm Apartments"; // Fallback
+        });
+      }
+    }
+  }
+
+  void _loadPendingComplaintsCount() async {
+    try {
+      setState(() {
+        _isLoadingComplaints = true;
+      });
+
+      // Load all complaints and filter for pending ones
+      final complaints = await ComplaintService.getAdminComplaints();
+      final pendingComplaints = complaints
+          .where((complaint) => complaint.status == ComplaintStatus.pending)
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _pendingComplaintsCount = pendingComplaints.length;
+          _isLoadingComplaints = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading pending complaints count: $e");
+      if (mounted) {
+        setState(() {
+          _pendingComplaintsCount = 0;
+          _isLoadingComplaints = false;
         });
       }
     }
@@ -246,9 +290,17 @@ class _DashboardPageState extends State<DashboardPage> {
                           context,
                           icon: Icons.report_problem,
                           title: "Complaints",
-                          subtitle: "3 active complaints",
-                          color: Colors.red.shade100,
-                          iconColor: Colors.red,
+                          subtitle: _isLoadingComplaints
+                              ? "Loading..."
+                              : _pendingComplaintsCount == 0
+                              ? "No pending complaints"
+                              : "$_pendingComplaintsCount pending complaint${_pendingComplaintsCount != 1 ? 's' : ''}",
+                          color: _pendingComplaintsCount > 0
+                              ? Colors.red.shade100
+                              : Colors.green.shade100,
+                          iconColor: _pendingComplaintsCount > 0
+                              ? Colors.red
+                              : Colors.green,
                           page: ComplaintPage(),
                         ),
                         _buildManageCard(
@@ -304,12 +356,16 @@ class _DashboardPageState extends State<DashboardPage> {
     Widget? page,
   }) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (page != null) {
-          Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => page),
           );
+          // Refresh complaints count when returning from ComplaintPage
+          if (page is ComplaintPage) {
+            _loadPendingComplaintsCount();
+          }
         }
       },
       child: Container(

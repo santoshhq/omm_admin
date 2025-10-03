@@ -3,6 +3,7 @@ import 'package:omm_admin/authentications/login_page/login_page_widget.dart';
 import 'package:omm_admin/bottum_navigation.dart';
 import 'package:omm_admin/admin_info/admin_info_form_widget.dart';
 import 'package:omm_admin/admin_info/admin_info_form_module.dart';
+import 'package:omm_admin/complaints/complaint_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -35,6 +36,11 @@ void main() async {
         await Future.delayed(Duration(milliseconds: 200 * (i + 1)));
       }
     }
+  }
+
+  // Initialize auto-cleanup for solved complaints
+  if (isLoggedIn) {
+    ComplaintService.initializeAutoCleanup();
   }
 
   runApp(MyApp(isLoggedIn: isLoggedIn, isProfileComplete: isProfileComplete));
