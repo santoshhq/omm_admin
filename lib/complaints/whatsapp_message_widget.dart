@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'message_service.dart';
@@ -221,11 +222,22 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   String? _adminId;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAdminIdAndMessages();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    // Auto-refresh messages every 5 seconds for real-time feel
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted && !_isLoading && !_isSending) {
+        _loadMessagesQuietly(); // Load without showing loading indicator
+      }
+    });
   }
 
   Future<void> _loadAdminIdAndMessages() async {
@@ -284,6 +296,51 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
           ),
         );
       }
+    }
+  }
+
+  // Quiet loading for auto-refresh (no loading indicator)
+  Future<void> _loadMessagesQuietly() async {
+    try {
+      final messages = await _messageService.getMessagesForComplaint(
+        widget.complaintId,
+      );
+
+      if (mounted) {
+        // Only update if there are new messages
+        if (messages.length != _messages.length) {
+          final hadMessages = _messages.isNotEmpty;
+          final newMessageCount = messages.length - _messages.length;
+
+          setState(() {
+            _messages = messages;
+          });
+
+          // Show notification for new messages
+          if (hadMessages && newMessageCount > 0) {
+            _scrollToBottom();
+
+            // Show subtle notification
+            /*   ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '$newMessageCount new message${newMessageCount > 1 ? 's' : ''} received',
+                ),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: const Color(0xFF25D366),
+              ),
+            );*/
+          }
+
+          print(
+            '🔄 Auto-refresh: Found ${messages.length} messages (was ${_messages.length - newMessageCount})',
+          );
+        }
+      }
+    } catch (e) {
+      // Silently handle errors during auto-refresh
+      print('⚠️ Auto-refresh error: $e');
     }
   }
 
@@ -346,9 +403,27 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
               style: const TextStyle(fontSize: 16),
               overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              '${_messages.length} messages',
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
+            Row(
+              children: [
+                Text(
+                  '${_messages.length} messages',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Live',
+                  style: TextStyle(fontSize: 10, color: Colors.white70),
+                ),
+              ],
             ),
           ],
         ),
@@ -457,6 +532,7 @@ class _WhatsAppChatScreenState extends State<WhatsAppChatScreen> {
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
