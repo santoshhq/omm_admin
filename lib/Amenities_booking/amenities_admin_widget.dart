@@ -38,14 +38,31 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
         throw Exception('Admin not logged in');
       }
 
-      final response = await ApiService.getAllAmenities(adminId: adminId);
+      // Add timestamp to force fresh data (cache busting)
+      final response = await ApiService.getAllAmenities(
+        adminId: adminId,
+        filters: {'_t': DateTime.now().millisecondsSinceEpoch.toString()},
+      );
       if (response['success'] == true) {
         // Clear existing amenities and load from backend
         amenitiesAdminModule.clearAmenities();
         final List<dynamic> amenitiesData = response['data'] ?? [];
 
         for (var amenityData in amenitiesData) {
+          print('🔍 LOADING: Raw amenity data from backend: $amenityData');
+          print(
+            '🔍 LOADING: Raw weeklySchedule: ${amenityData['weeklySchedule']}',
+          );
+
           final amenity = AmenityModel.fromJson(amenityData);
+
+          print('🔍 LOADING: Parsed amenity weekly schedule:');
+          amenity.weeklySchedule.forEach((day, schedule) {
+            print(
+              '🔍   $day: ${schedule.open}-${schedule.close} (closed: ${schedule.closed})',
+            );
+          });
+
           amenitiesAdminModule.addAmenity(amenity);
         }
         /* ScaffoldMessenger.of(context).showSnackBar(
@@ -963,25 +980,34 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
                                                                   .shade600,
                                                       ),
                                                       const SizedBox(width: 6),
-                                                      Text(
-                                                        a.bookingType ==
-                                                                'shared'
-                                                            ? 'Shared'
-                                                            : 'Exclusive',
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color:
-                                                              a.bookingType ==
-                                                                  'shared'
-                                                              ? Colors
-                                                                    .blue
-                                                                    .shade700
-                                                              : Colors
-                                                                    .orange
-                                                                    .shade700,
-                                                        ),
+                                                      Column(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            a.bookingType ==
+                                                                    'shared'
+                                                                ? 'Shared'
+                                                                : 'Exclusive',
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color:
+                                                                  a.bookingType ==
+                                                                      'shared'
+                                                                  ? Colors
+                                                                        .blue
+                                                                        .shade700
+                                                                  : Colors
+                                                                        .orange
+                                                                        .shade700,
+                                                            ),
+                                                          ),
+
+                                                          // Debug: Show raw value
+                                                        ],
                                                       ),
                                                     ],
                                                   ),
@@ -1294,13 +1320,13 @@ class _AddAmenityPageState extends State<AddAmenityPage> {
   // New fields for backend compatibility
   String _bookingType = 'shared'; // 'shared' or 'exclusive'
   Map<String, WeeklyDay> _weeklySchedule = {
-    'monday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'tuesday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'wednesday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'thursday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'friday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'saturday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
-    'sunday': WeeklyDay(open: '09:00', close: '18:00', closed: false),
+    'monday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'tuesday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'wednesday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'thursday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'friday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'saturday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+    'sunday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
   };
 
   @override
@@ -1403,6 +1429,20 @@ class _AddAmenityPageState extends State<AddAmenityPage> {
       final weeklyScheduleJson = _weeklySchedule.map(
         (key, value) => MapEntry(key, value.toJson()),
       );
+
+      // Debug: Print what we're sending to the backend
+      print('🔍 ADD: Sending weekly schedule to backend:');
+      _weeklySchedule.forEach((day, schedule) {
+        print(
+          '🔍   $day: ${schedule.open}-${schedule.close} (closed: ${schedule.closed})',
+        );
+      });
+
+      // Also print the JSON format
+      print('🔍 ADD: Weekly schedule JSON format:');
+      weeklyScheduleJson.forEach((day, scheduleJson) {
+        print('🔍   $day JSON: $scheduleJson');
+      });
 
       // Call backend API to create amenity
       final response = await ApiService.createAmenity(
@@ -2148,13 +2188,13 @@ class _EditAmenityPageState extends State<EditAmenityPage> {
     } else {
       // Provide default schedule if empty
       _weeklySchedule = {
-        'monday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'tuesday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'wednesday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'thursday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'friday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'saturday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
-        'sunday': WeeklyDay(open: '09:00', close: '6:00', closed: false),
+        'monday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'tuesday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'wednesday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'thursday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'friday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'saturday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
+        'sunday': WeeklyDay(open: '06:00', close: '22:00', closed: false),
       };
       print('⚠️ Using default weekly schedule');
     }
@@ -2274,6 +2314,20 @@ class _EditAmenityPageState extends State<EditAmenityPage> {
         final weeklyScheduleJson = _weeklySchedule.map(
           (key, value) => MapEntry(key, value.toJson()),
         );
+
+        // Debug: Print what we're sending to the backend
+        print('🔍 UPDATE: Sending weekly schedule to backend:');
+        _weeklySchedule.forEach((day, schedule) {
+          print(
+            '🔍   $day: ${schedule.open}-${schedule.close} (closed: ${schedule.closed})',
+          );
+        });
+
+        // Also print the JSON format
+        print('🔍 UPDATE: Weekly schedule JSON format:');
+        weeklyScheduleJson.forEach((day, scheduleJson) {
+          print('🔍   $day JSON: $scheduleJson');
+        });
 
         final response = await ApiService.updateAmenity(
           adminId: adminId,
