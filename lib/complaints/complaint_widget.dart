@@ -605,145 +605,237 @@ class _ComplaintPageState extends State<ComplaintPage> {
 
   // Build individual complaint card - simple and light
   Widget _buildComplaintCard(Complaint c, int index) {
-    return Card(
+    // Define background colors and border colors based on complaint status
+    Color cardBackgroundColor;
+    Color borderColor;
+    double borderWidth;
+
+    switch (c.status) {
+      case ComplaintStatus.pending:
+        cardBackgroundColor = Colors.yellow.shade50; // Light yellowish
+        borderColor = Colors.yellow.shade200; // Subtle yellow border
+        borderWidth = 1.0;
+        break;
+      case ComplaintStatus.unsolved:
+        cardBackgroundColor = Colors.red.shade50; // Light reddish
+        borderColor = Colors.red.shade200; // Subtle red border
+        borderWidth = 1.0;
+        break;
+      case ComplaintStatus.solved:
+        cardBackgroundColor = Colors.white; // Default white (remains same)
+        borderColor = Colors.transparent; // No border for solved
+        borderWidth = 0.0;
+        break;
+    }
+
+    // Add subtle pulse animation for unsolved complaints
+    Widget cardWidget = Card(
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: borderColor, width: borderWidth),
+      ),
+      color: cardBackgroundColor, // Apply the status-based background color
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
           _showComplaintDetails(context, c);
         },
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with Title and Status
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      c.title,
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1F2937),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: _getCardGradient(
+              c.status,
+            ), // Add subtle gradient based on status
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with Title and Status
+                Row(
+                  children: [
+                    // Status icon indicator
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: c.status.color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.status.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: c.status.color.withOpacity(0.3),
-                        width: 1,
+                      child: Icon(
+                        _getStatusIcon(c.status),
+                        size: 16,
+                        color: c.status.color,
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: c.status.color,
-                            shape: BoxShape.circle,
-                          ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        c.title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          c.status.displayName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: c.status.color,
-                          ),
-                        ),
-                      ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.status.color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: c.status.color.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: c.status.color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            c.status.displayName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: c.status.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-              // Reporter Info
-              Row(
-                children: [
-                  const Icon(
-                    Icons.person_outline,
-                    size: 18,
-                    color: Color(0xFF6B7280),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      c.name,
+                // Reporter Info
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.person_outline,
+                      size: 18,
+                      color: Color(0xFF6B7280),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        c.name,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          color: const Color(0xFF374151),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Flat Number
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.home_outlined,
+                      size: 18,
+                      color: Color(0xFF6B7280),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Flat ${c.flatNo}',
                       style: GoogleFonts.poppins(
                         fontSize: 15,
                         color: const Color(0xFF374151),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
-              // Flat Number
-              Row(
-                children: [
-                  const Icon(
-                    Icons.home_outlined,
-                    size: 18,
-                    color: Color(0xFF6B7280),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Flat ${c.flatNo}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      color: const Color(0xFF374151),
-                      fontWeight: FontWeight.w500,
+                // Bottom Row with Time and Chat Button
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.access_time,
+                      size: 16,
+                      color: Color(0xFF9CA3AF),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Bottom Row with Time and Chat Button
-              Row(
-                children: [
-                  const Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: Color(0xFF9CA3AF),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    ISTTimeUtil.formatMessageTime(c.createdAt),
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: const Color(0xFF9CA3AF),
+                    const SizedBox(width: 6),
+                    Text(
+                      ISTTimeUtil.formatMessageTime(c.createdAt),
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: const Color(0xFF9CA3AF),
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  _buildChatButtonWithBadge(c),
-                ],
-              ),
-            ],
+                    const Spacer(),
+                    _buildChatButtonWithBadge(c),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+
+    return cardWidget;
+  }
+
+  // Get gradient decoration based on complaint status
+  LinearGradient? _getCardGradient(ComplaintStatus status) {
+    switch (status) {
+      case ComplaintStatus.pending:
+        return LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.yellow.shade50,
+            Colors.yellow.shade100.withOpacity(0.3), // Very subtle gradient
+          ],
+          stops: const [0.0, 1.0],
+        );
+      case ComplaintStatus.unsolved:
+        return LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.red.shade50,
+            Colors.red.shade100.withOpacity(0.3), // Very subtle gradient
+          ],
+          stops: const [0.0, 1.0],
+        );
+      case ComplaintStatus.solved:
+        return null; // No gradient for solved complaints (keep it simple)
+    }
+  }
+
+  // Get appropriate icon for complaint status
+  IconData _getStatusIcon(ComplaintStatus status) {
+    switch (status) {
+      case ComplaintStatus.pending:
+        return Icons.schedule; // Clock icon for pending
+      case ComplaintStatus.unsolved:
+        return Icons.error_outline; // Warning icon for unsolved
+      case ComplaintStatus.solved:
+        return Icons.check_circle_outline; // Check icon for solved
+    }
   }
 
   Widget _buildFullWidthChatButton(Complaint complaint) {

@@ -22,9 +22,73 @@ class _EventAnnounState extends State<EventAnnoun> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Events & Announcements")),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.event, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Events & Announcements',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Manage community updates',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF455A64),
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF455A64), Color(0xFF607D8B)],
+            ),
+          ),
+        ),
+        actions: [
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white, size: 24),
+              onPressed: () {
+                // Refresh the current view
+                setState(() {
+                  // Force rebuild to refresh data
+                });
+              },
+              tooltip: 'Refresh Events & Announcements',
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Column(
         children: [
+          // Professional spacing from AppBar
+          const SizedBox(height: 16),
           _buildToggleTabs(),
           Expanded(
             child: _showEvents

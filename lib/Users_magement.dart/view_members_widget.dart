@@ -146,20 +146,62 @@ class _MembersPageState extends State<MembersPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          " View Members",
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.people, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'View Members',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Manage community members',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF455A64),
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF455A64), Color(0xFF607D8B)],
+            ),
+          ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueGrey,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0xFF607D8B).withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.person_add, color: Colors.white),
               onPressed: () async {
                 final newMember = await Navigator.push<MemberRegistrationModel>(
                   context,
@@ -173,14 +215,16 @@ class _MembersPageState extends State<MembersPage> {
                   _fetchMembers();
                 }
               },
-              icon: const Icon(Icons.add, size: 20, color: Colors.white),
-              label: const Text("Add", style: TextStyle(color: Colors.white)),
+              tooltip: 'Add New Member',
             ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
+          // Professional spacing from AppBar
+          const SizedBox(height: 16),
           // Search bar
           Padding(
             padding: const EdgeInsets.all(12.0),

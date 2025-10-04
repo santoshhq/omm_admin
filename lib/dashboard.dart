@@ -308,14 +308,14 @@ class _DashboardPageState extends State<DashboardPage> {
                           icon: Icons.receipt_long,
                           title: "Manage Bills",
                           subtitle: "12 pending bills",
-                          color: Colors.green.shade100,
-                          iconColor: Colors.green,
+                          color: Colors.orange.shade100,
+                          iconColor: Colors.orange,
                           page: BillsPage(),
                         ),
 
                         _buildManageCard(
                           context,
-                          icon: Icons.theater_comedy,
+                          icon: Icons.villa,
                           title: "Bookings ",
                           subtitle: "Tap to view",
                           color: Colors.blue.shade100,

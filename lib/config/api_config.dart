@@ -869,6 +869,8 @@ class ApiService {
     required String name,
     required String description,
     required int capacity,
+    required String bookingType,
+    required Map<String, dynamic> weeklySchedule,
     required List<String> imagePaths,
     String? location,
     double? hourlyRate,
@@ -879,7 +881,10 @@ class ApiService {
       print("🚀 Starting create amenity process...");
       print("🔑 Admin ID: $createdByAdminId");
       print("🏊 Amenity: $name");
-      print("� Capacity: $capacity");
+      print("📝 Description: $description");
+      print("👥 Capacity: $capacity");
+      print("🎯 Booking Type: $bookingType");
+      print("📅 Weekly Schedule: $weeklySchedule");
       print("💰 Hourly Rate: ${hourlyRate ?? 0.0}");
       print("📸 Images: ${imagePaths.length} images");
       print("🌐 Base URL: $amenitiesBaseUrl");
@@ -892,6 +897,8 @@ class ApiService {
           "name": name,
           "description": description,
           "capacity": capacity,
+          "bookingType": bookingType,
+          "weeklySchedule": weeklySchedule,
           "imagePaths": imagePaths,
           "location": location ?? "",
           "hourlyRate": hourlyRate ?? 0.0,
@@ -1086,6 +1093,8 @@ class ApiService {
     String? name,
     String? description,
     int? capacity,
+    String? bookingType,
+    Map<String, dynamic>? weeklySchedule,
     List<String>? imagePaths,
     String? location,
     double? hourlyRate,
@@ -1097,7 +1106,11 @@ class ApiService {
       print("🔑 Admin ID: $adminId");
       print("🆔 Amenity ID: $amenityId");
       print("🏊 Updated Name: ${name ?? 'No change'}");
-      print("💰 Updated Hourly Rate: ${hourlyRate ?? 'No change'}");
+      print("🎯 Updated Booking Type: ${bookingType ?? 'No change'}");
+      print(
+        "� Updated Weekly Schedule: ${weeklySchedule != null ? 'Updated' : 'No change'}",
+      );
+      print("�💰 Updated Hourly Rate: ${hourlyRate ?? 'No change'}");
       print("🌐 Base URL: $amenitiesBaseUrl");
 
       // Create update data map, only include non-null values
@@ -1105,6 +1118,8 @@ class ApiService {
       if (name != null) updateData['name'] = name;
       if (description != null) updateData['description'] = description;
       if (capacity != null) updateData['capacity'] = capacity;
+      if (bookingType != null) updateData['bookingType'] = bookingType;
+      if (weeklySchedule != null) updateData['weeklySchedule'] = weeklySchedule;
       if (imagePaths != null) updateData['imagePaths'] = imagePaths;
       if (location != null) updateData['location'] = location;
       if (hourlyRate != null) updateData['hourlyRate'] = hourlyRate;

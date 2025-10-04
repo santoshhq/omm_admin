@@ -134,7 +134,7 @@ class _BottumNavigationState extends State<BottumNavigation> {
         height: 60,
         items: const [
           Icon(Icons.groups_outlined, size: 28, color: Colors.white),
-          Icon(Icons.theater_comedy, size: 28, color: Colors.white),
+          Icon(Icons.villa, size: 28, color: Colors.white),
           Icon(Icons.home, size: 28, color: Colors.white),
           Icon(Icons.add_box, size: 28, color: Colors.white),
           Icon(Icons.person_outline, size: 28, color: Colors.white),
