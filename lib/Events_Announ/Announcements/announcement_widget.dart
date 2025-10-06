@@ -114,7 +114,7 @@ class AnnouncementContentState extends State<AnnouncementContent> {
     super.dispose();
   }
 
-  /// Load all announcements from the backend
+  /// Load announcements from the backend (admin-specific)
   Future<void> _loadAnnouncements() async {
     if (_isDisposed) return;
 
@@ -124,19 +124,58 @@ class AnnouncementContentState extends State<AnnouncementContent> {
         _errorMessage = null;
       });
 
-      final response = await ApiService.getAllAnnouncementCards();
+      // Get current admin ID to filter announcements per admin
+      final adminId = await AdminSessionService.getAdminId();
+      print('🔍 Loading announcements for Admin ID: $adminId');
 
+      if (adminId == null) {
+        throw Exception('Admin session expired. Please login again.');
+      }
+
+      // Try to get admin-specific announcements from backend, fallback to client-side filtering
+      final response = await ApiService.getAnnouncementCardsByAdminId(adminId);
+      print('📦 API Response: ${response.toString()}');
+
+      // Check again after the async call
       if (_isDisposed || !mounted) return;
 
       final List<dynamic> announcementData = response['data'] ?? [];
 
+      // If backend doesn't support admin filtering, filter on frontend with object format handling
+      final adminAnnouncements = announcementData.where((announcementJson) {
+        final announcementAdminId = announcementJson['adminId'];
+        String? adminIdFromAnnouncement;
+
+        // Handle different adminId formats from backend
+        if (announcementAdminId is String) {
+          adminIdFromAnnouncement = announcementAdminId;
+        } else if (announcementAdminId is Map &&
+            announcementAdminId['_id'] != null) {
+          adminIdFromAnnouncement = announcementAdminId['_id'].toString();
+        } else {
+          adminIdFromAnnouncement = announcementAdminId?.toString();
+        }
+
+        final matches = adminIdFromAnnouncement == adminId;
+        print(
+          '🔍 Announcement "${announcementJson['title']}" - adminId: $adminIdFromAnnouncement, Current: $adminId, matches: $matches',
+        );
+        return matches;
+      }).toList();
+
       _safeSetState(() {
-        announcements = announcementData
+        announcements = adminAnnouncements
             .map((json) => Announcement.fromJson(json))
             .toList();
         _sortAnnouncements();
         _isLoading = false;
       });
+
+      // Debug info
+      print('🔍 Admin ID: $adminId');
+      print('🔍 Total announcements from backend: ${announcementData.length}');
+      print('🔍 Admin-specific announcements: ${adminAnnouncements.length}');
+      print('🔍 Final announcements in UI: ${announcements.length}');
     } catch (e) {
       _safeSetState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -154,13 +193,22 @@ class AnnouncementContentState extends State<AnnouncementContent> {
   void addOptimisticAnnouncement(Announcement announcement) {
     if (_isDisposed) return;
 
+    print('🎯 Adding optimistic announcement: ${announcement.title}');
+    print('🎯 Announcement adminId: ${announcement.adminId}');
+
     _safeSetState(() {
       announcements.insert(0, announcement);
       _sortAnnouncements();
     });
 
-    // Refresh from backend to get the real data
-    refreshAnnouncements();
+    // Refresh from backend to get the real data after a short delay
+    // This ensures the backend has processed the creation
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!_isDisposed && mounted) {
+        print('🔄 Refreshing announcements after optimistic add...');
+        refreshAnnouncements();
+      }
+    });
   }
 
   /// Open compose sheet for creating or editing announcements

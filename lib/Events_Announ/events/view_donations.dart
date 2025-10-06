@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'modules.dart';
 import '../../config/api_config.dart';
+import '../../services/admin_session_service.dart';
 
 class ViewDonationsPage extends StatefulWidget {
   final Festival festival;
@@ -37,7 +38,16 @@ class _ViewDonationsPageState extends State<ViewDonationsPage> {
         });
       }
 
-      final response = await ApiService.getEventCardById(festival.id!);
+      // Get admin ID for the API call
+      String? adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        throw Exception("Admin not logged in");
+      }
+
+      final response = await ApiService.getEventCardById(
+        id: festival.id!,
+        adminId: adminId,
+      );
 
       // Check again after the async call
       if (_isDisposed || !mounted) return;

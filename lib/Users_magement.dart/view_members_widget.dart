@@ -117,19 +117,19 @@ class _MembersPageState extends State<MembersPage> {
   Color _getCardColor(String? status) {
     switch (status) {
       case 'I':
-        return Colors.red.shade100;
+        return const Color(0xFFFFEBEE); // Soft Rose - Very light pink/red
       case 'II':
-        return Colors.green.shade100;
+        return const Color(0xFFE8F5E8); // Mint Fresh - Very light green
       case 'III':
-        return Colors.blue.shade100;
+        return const Color(0xFFE3F2FD); // Sky Blue - Very light blue
       case 'IV':
-        return Colors.orange.shade50;
+        return const Color(0xFFFFF3E0); // Peach Cream - Very light orange
       case 'V':
-        return Colors.purple.shade100;
+        return const Color(0xFFF3E5F5); // Lavender Mist - Very light purple
       case 'VI':
-        return Colors.teal.shade100;
+        return const Color(0xFFE0F2F1); // Aqua Mint - Very light teal
       default:
-        return Colors.grey.shade100; // fallback
+        return const Color(0xFFF5F5F5); // Pearl White - Very light grey
     }
   }
 
@@ -331,104 +331,319 @@ class ViewIdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: bgColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 4,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MemberDetailsWidget(member: model),
-            ),
-          );
-          if (context.mounted) {
-            (context.findAncestorStateOfType<_MembersPageState>())
-                ?._fetchMembers();
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ===== Profile + Name + Mobile =====
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundImage: model.profileImage,
-                    child: model.profileImage == null
-                        ? const Icon(Icons.person, size: 30)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "${model.firstName ?? ''} ${model.lastName ?? ''}",
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          model.mobile ?? '-',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // ===== Flat & Floor =====
-              Text(
-                "Flat No: ${model.flatNo ?? '-'}   |   Floor: ${model.floor ?? '-'}",
-                style: const TextStyle(fontSize: 14),
-              ),
-
-              const SizedBox(height: 8),
-
-              // ===== Email =====
-              Row(
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [bgColor, bgColor.withOpacity(0.7)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MemberDetailsWidget(member: model),
+                ),
+              );
+              if (context.mounted) {
+                (context.findAncestorStateOfType<_MembersPageState>())
+                    ?._fetchMembers();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.email, size: 16, color: Colors.green.shade600),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Recovery Email",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.green.shade700,
+                  // ===== Header Section =====
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Profile Avatar with status indicator
+                      Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  const Color(0xFF455A64),
+                                  const Color(0xFF607D8B),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF455A64,
+                                  ).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 32,
+                              backgroundColor: Colors.transparent,
+                              backgroundImage: model.profileImage,
+                              child: model.profileImage == null
+                                  ? const Icon(
+                                      Icons.person_rounded,
+                                      size: 36,
+                                      color: Colors.white,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          // Status dot
+                          Positioned(
+                            right: 2,
+                            bottom: 2,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      // Name and details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Name
+                            Text(
+                              "${model.firstName ?? ''} ${model.lastName ?? ''}"
+                                      .trim()
+                                      .isEmpty
+                                  ? 'No Name'
+                                  : "${model.firstName ?? ''} ${model.lastName ?? ''}",
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2C3E50),
+                                letterSpacing: 0.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            // User ID Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color(0xFF3498DB),
+                                    const Color(0xFF2980B9),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF3498DB,
+                                    ).withOpacity(0.3),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                "ID: ${model.userId ?? 'Not Generated'}",
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Payment Status Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getPaymentStatusColor().withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _getPaymentStatusColor(),
+                            width: 1.5,
                           ),
                         ),
-                        Text(
-                          model.email ?? 'Not provided',
+                        child: Text(
+                          model.paymentStatus ?? 'Pending',
                           style: TextStyle(
-                            fontSize: 14,
-                            color: model.email != null
-                                ? Colors.green.shade800
-                                : Colors.red.shade600,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _getPaymentStatusColor(),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ===== Information Grid =====
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200, width: 1),
+                    ),
+                    child: Column(
+                      children: [
+                        // Row 1: Flat & Floor + Mobile
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildInfoItem(
+                                Icons.home_rounded,
+                                "Flat ${model.flatNo ?? '-'} • Floor ${model.floor ?? '-'}",
+                                const Color(0xFF8E44AD),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildInfoItem(
+                                Icons.phone_rounded,
+                                model.mobile ?? 'No Mobile',
+                                const Color(0xFF27AE60),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Row 2: Email
+                        _buildInfoItem(
+                          Icons.email_rounded,
+                          model.email ?? 'No Email',
+                          const Color(0xFFE67E22),
+                        ),
+                        const SizedBox(height: 12),
+                        // Row 3: Govt ID
+                        _buildInfoItem(
+                          Icons.badge_rounded,
+                          "ID: ${model.govtIdType ?? 'Not Provided'}",
+                          const Color(0xFF34495E),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ===== Action Buttons =====
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildModernAction(
+                            Icons.call_rounded,
+                            "Call",
+                            const Color(0xFF3498DB),
+                            () {
+                              // TODO: Implement call functionality
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildModernAction(
+                            Icons.message_rounded,
+                            "WhatsApp",
+                            const Color(0xFF25D366),
+                            () {
+                              // TODO: Implement WhatsApp functionality
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildModernAction(
+                            Icons.edit_rounded,
+                            "Edit",
+                            const Color(0xFF9B59B6),
+                            () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EditMemberWidget(member: model),
+                                ),
+                              );
+                              if (result != null && context.mounted) {
+                                (context
+                                        .findAncestorStateOfType<
+                                          _MembersPageState
+                                        >())
+                                    ?._fetchMembers();
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildModernAction(
+                            Icons.delete_rounded,
+                            "Delete",
+                            const Color(0xFFE74C3C),
+                            () {
+                              // TODO: Implement delete functionality
+                            },
                           ),
                         ),
                       ],
@@ -436,75 +651,72 @@ class ViewIdCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-              const SizedBox(height: 8),
+  Widget _buildInfoItem(IconData icon, String text, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade700,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
 
-              // ===== Payment Status =====
+  Widget _buildModernAction(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.2), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(height: 4),
               Text(
-                "Payment Status: ${model.paymentStatus ?? '-'}",
-                style: const TextStyle(
-                  fontSize: 14,
+                label,
+                style: TextStyle(
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
+                  color: color,
+                  letterSpacing: 0.3,
                 ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // ===== User ID =====
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.blue.shade300),
-                ),
-                child: Text(
-                  "User ID: ${model.userId ?? 'Not Generated'}",
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // ===== Govt ID =====
-              Text(
-                "Govt ID Type: ${model.govtIdType ?? '-'}",
-                style: const TextStyle(fontSize: 14),
-              ),
-
-              const SizedBox(height: 12),
-              const Divider(),
-
-              // ===== Action Buttons =====
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildAction(Icons.call, "Call", Colors.blue, () {
-                    // TODO: Implement call functionality
-                  }),
-                  _buildAction(Icons.message, "WhatsApp", Colors.green, () {
-                    // TODO: Implement WhatsApp functionality
-                  }),
-                  _buildAction(Icons.edit, "Edit", Colors.indigo, () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EditMemberWidget(member: model),
-                      ),
-                    );
-                    if (result != null && context.mounted) {
-                      (context.findAncestorStateOfType<_MembersPageState>())
-                          ?._fetchMembers();
-                    }
-                  }),
-                  _buildAction(Icons.delete, "Delete", Colors.red, () {
-                    // TODO: Implement delete functionality
-                  }),
-                ],
               ),
             ],
           ),
@@ -513,25 +725,26 @@ class ViewIdCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAction(
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 11, color: color)),
-          ],
-        ),
-      ),
-    );
+  Color _getStatusColor() {
+    // Green for active/complete, orange for pending, red for inactive
+    final status = model.paymentStatus?.toLowerCase();
+    if (status == 'paid' || status == 'active' || status == 'completed') {
+      return const Color(0xFF27AE60);
+    } else if (status == 'pending' || status == 'processing') {
+      return const Color(0xFFF39C12);
+    } else {
+      return const Color(0xFFE74C3C);
+    }
+  }
+
+  Color _getPaymentStatusColor() {
+    final status = model.paymentStatus?.toLowerCase();
+    if (status == 'paid' || status == 'active' || status == 'completed') {
+      return const Color(0xFF27AE60);
+    } else if (status == 'pending' || status == 'processing') {
+      return const Color(0xFFF39C12);
+    } else {
+      return const Color(0xFFE74C3C);
+    }
   }
 }

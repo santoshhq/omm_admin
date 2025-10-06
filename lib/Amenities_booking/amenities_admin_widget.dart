@@ -92,6 +92,40 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
     }
   }
 
+  /// Silently refresh amenities from backend without showing loading indicator
+  void _silentRefreshAmenities() async {
+    // Small delay to avoid too frequent API calls and improve perceived performance
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    try {
+      // Get admin ID from session
+      final adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        throw Exception('Admin not logged in');
+      }
+
+      // Add timestamp to force fresh data (cache busting)
+      final response = await ApiService.getAllAmenities(
+        adminId: adminId,
+        filters: {'_t': DateTime.now().millisecondsSinceEpoch.toString()},
+      );
+      if (response['success'] == true) {
+        // Clear existing amenities and load from backend silently
+        amenitiesAdminModule.clearAmenities();
+        final List<dynamic> amenitiesData = response['data'] ?? [];
+
+        for (var amenityData in amenitiesData) {
+          final amenity = AmenityModel.fromJson(amenityData);
+          amenitiesAdminModule.addAmenity(amenity);
+        }
+        print('🔄 Silent refresh completed successfully');
+      }
+    } catch (e) {
+      // Silent refresh - don't show error to user for better UX
+      print('🔍 Silent refresh failed: $e');
+    }
+  }
+
   @override
   void dispose() {
     amenitiesAdminModule.removeListener(_onModuleChanged);
@@ -106,7 +140,20 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
       MaterialPageRoute(builder: (_) => const AddAmenityPage()),
     );
     if (newAmenity != null) {
-      amenitiesAdminModule.addAmenity(newAmenity);
+      // Refresh from backend instead of just adding locally to ensure data consistency
+      _loadAmenitiesFromBackend();
+
+      // Show success message
+      /*  ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green,
+          content: Text(
+            '✅ New amenity added and refreshed successfully!',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );*/
     }
   }
 
@@ -119,7 +166,20 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
       ),
     );
     if (updatedAmenity != null) {
-      amenitiesAdminModule.updateAmenity(index, updatedAmenity);
+      // Instead of just updating local list, refresh from backend to get the latest data
+      _loadAmenitiesFromBackend();
+
+      // Show success message
+      /* ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green,
+          content: Text(
+            '✅ Amenity updated and refreshed successfully!',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );*/
     }
   }
 
@@ -196,28 +256,11 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
         print('📤 Delete response: $response');
 
         if (response['success'] == true) {
-          if (deleteType == 'hard') {
-            // For hard delete, remove from local list completely
-            amenitiesAdminModule.removeAmenity(index);
-            print('✅ Amenity permanently deleted and removed from local list');
-          } else {
-            // For soft delete, update the amenity status to inactive
-            final updatedAmenity = AmenityModel(
-              id: amenity.id,
-              name: amenity.name,
-              description: amenity.description,
-              capacity: amenity.capacity,
-              imagePaths: amenity.imagePaths,
-              location: amenity.location,
-              hourlyRate: amenity.hourlyRate,
-              features: amenity.features,
-              active: false, // Mark as inactive
-            );
-            amenitiesAdminModule.updateAmenity(index, updatedAmenity);
-            print('✅ Amenity deactivated in local list');
-          }
+          // Refresh from backend instead of manual local updates to ensure data consistency
+          _loadAmenitiesFromBackend();
+          print('✅ Amenity deleted and refreshed from backend');
 
-          ScaffoldMessenger.of(context).showSnackBar(
+          /*  ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               behavior: SnackBarBehavior.floating,
               backgroundColor: Colors.green,
@@ -228,7 +271,7 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
                 style: const TextStyle(color: Colors.white),
               ),
             ),
-          );
+          );*/
         } else {
           throw Exception(
             response['message'] ?? 'Failed to delete amenity from backend',
@@ -265,15 +308,32 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
     }
   }
 
-  /// Toggle amenity active status and sync with backend
+  /// Toggle amenity active status and sync with backend - Smooth UX
   void _toggleAmenityStatus(int index, bool newStatus) async {
     final amenity = amenitiesAdminModule.amenities[index];
 
-    // Add this amenity to the toggling set
-    setState(() => _togglingAmenities.add(index));
+    // Optimistic update - update UI immediately for instant feedback
+    final optimisticUpdate = AmenityModel(
+      id: amenity.id,
+      createdByAdminId: amenity.createdByAdminId,
+      name: amenity.name,
+      bookingType: amenity.bookingType,
+      weeklySchedule: amenity.weeklySchedule,
+      imagePaths: amenity.imagePaths,
+      description: amenity.description,
+      capacity: amenity.capacity,
+      active: newStatus,
+      location: amenity.location,
+      hourlyRate: amenity.hourlyRate,
+      features: amenity.features,
+      createdAt: amenity.createdAt,
+      updatedAt: amenity.updatedAt,
+    );
+    amenitiesAdminModule.updateAmenity(index, optimisticUpdate);
+
     try {
       if (amenity.id.isNotEmpty) {
-        // Update in backend if it has an ID
+        // Update in backend
         final adminId = await AdminSessionService.getAdminId();
         if (adminId == null) {
           throw Exception('Admin not logged in');
@@ -286,26 +346,10 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
         );
 
         if (response['success'] == true) {
-          // Update local model
-          final updated = AmenityModel(
-            id: amenity.id,
-            createdByAdminId: amenity.createdByAdminId,
-            name: amenity.name,
-            bookingType: amenity.bookingType,
-            weeklySchedule: amenity.weeklySchedule,
-            imagePaths: amenity.imagePaths,
-            description: amenity.description,
-            capacity: amenity.capacity,
-            active: newStatus,
-            location: amenity.location,
-            hourlyRate: amenity.hourlyRate,
-            features: amenity.features,
-            createdAt: amenity.createdAt,
-            updatedAt: amenity.updatedAt,
-          );
-          amenitiesAdminModule.updateAmenity(index, updated);
+          // Silent background refresh to sync with backend data
+          _silentRefreshAmenities();
 
-          ScaffoldMessenger.of(context).showSnackBar(
+          /*  ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               behavior: SnackBarBehavior.floating,
               backgroundColor: Colors.green,
@@ -314,29 +358,16 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
                 style: const TextStyle(color: Colors.white),
               ),
             ),
-          );
+          );*/
+        } else {
+          // Revert optimistic update on failure
+          amenitiesAdminModule.updateAmenity(index, amenity);
         }
-      } else {
-        // Update local model only if no backend ID
-        final updated = AmenityModel(
-          id: amenity.id,
-          createdByAdminId: amenity.createdByAdminId,
-          name: amenity.name,
-          bookingType: amenity.bookingType,
-          weeklySchedule: amenity.weeklySchedule,
-          imagePaths: amenity.imagePaths,
-          description: amenity.description,
-          capacity: amenity.capacity,
-          active: newStatus,
-          location: amenity.location,
-          hourlyRate: amenity.hourlyRate,
-          features: amenity.features,
-          createdAt: amenity.createdAt,
-          updatedAt: amenity.updatedAt,
-        );
-        amenitiesAdminModule.updateAmenity(index, updated);
       }
     } catch (e) {
+      // Revert optimistic update on error
+      amenitiesAdminModule.updateAmenity(index, amenity);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -347,9 +378,6 @@ class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
           ),
         ),
       );
-    } finally {
-      // Remove this amenity from the toggling set
-      setState(() => _togglingAmenities.remove(index));
     }
   }
 
@@ -1465,19 +1493,6 @@ class _AddAmenityPageState extends State<AddAmenityPage> {
         final a = AmenityModel.fromJson(backendData);
 
         Navigator.pop(context, a);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green,
-              content: Text(
-                '✅ ${a.name} created successfully!',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -2355,17 +2370,6 @@ class _EditAmenityPageState extends State<EditAmenityPage> {
             hourlyRate: double.parse(_hourly.text),
             features: features,
             active: _active,
-          );
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green,
-              content: const Text(
-                '✅ Amenity updated successfully!',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
           );
 
           Navigator.pop(context, updatedAmenity);

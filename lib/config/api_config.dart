@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../services/admin_session_service.dart';
 
 class ApiService {
   // Dynamic base URL based on platform
@@ -1435,6 +1436,126 @@ class ApiService {
     }
   }
 
+  /// Get Event Cards by Admin ID - Admin-specific filtering
+  static Future<Map<String, dynamic>> getEventCardsByAdminId(
+    String adminId,
+  ) async {
+    try {
+      print("🚀 Fetching event cards for admin: $adminId");
+      print("🌐 Primary URL: $eventsBaseUrl/admin/$adminId");
+
+      final url = Uri.parse("$eventsBaseUrl/admin/$adminId");
+      final response = await http
+          .get(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Connection": "close",
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print("📱 Primary Response Status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body["success"] == true) {
+          print("✅ Admin events fetched successfully from primary endpoint!");
+          final eventCount = body["data"] is List ? body["data"].length : 0;
+          print("📊 Primary endpoint events: $eventCount");
+          return {
+            "success": true,
+            "message": "Admin events fetched successfully",
+            "data": body["data"],
+          };
+        } else {
+          print("❌ Primary endpoint returned success: false");
+          throw Exception(body["message"] ?? "Failed to fetch admin events");
+        }
+      } else {
+        print("❌ Primary endpoint returned status: ${response.statusCode}");
+        throw Exception("Server error: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("🔥 Primary endpoint error: $e");
+
+      // FALLBACK: Try legacy route with adminId query parameter
+      print(
+        "🔄 Trying fallback to legacy route with adminId query parameter...",
+      );
+      try {
+        final fallbackUrl = Uri.parse("$eventsBaseUrl?adminId=$adminId");
+        print("🌐 Fallback URL: $fallbackUrl");
+
+        final fallbackResponse = await http
+            .get(
+              fallbackUrl,
+              headers: {
+                "Content-Type": "application/json",
+                "Connection": "close",
+              },
+            )
+            .timeout(const Duration(seconds: 30));
+
+        print("📱 Fallback Response Status: ${fallbackResponse.statusCode}");
+
+        if (fallbackResponse.statusCode == 200) {
+          final body = jsonDecode(fallbackResponse.body);
+          if (body["success"] == true) {
+            final List<dynamic> allEvents = body['data'] ?? [];
+            print("📊 Fallback total events received: ${allEvents.length}");
+
+            // Additional client-side filtering for safety with object format handling
+            final adminEvents = allEvents.where((eventJson) {
+              final eventAdminId = eventJson['adminId'];
+              String? adminIdFromEvent;
+
+              // Handle both object and string formats
+              if (eventAdminId is Map<String, dynamic>) {
+                // Backend returns: {_id: "68d664d7d84448fff5dc3a8b", email: "qwert123@gmail.com"}
+                adminIdFromEvent = eventAdminId['_id']?.toString();
+                print(
+                  "🔍 Event adminId object format: $eventAdminId -> extracted ID: $adminIdFromEvent",
+                );
+              } else {
+                // Backend returns simple string
+                adminIdFromEvent = eventAdminId?.toString();
+                print("🔍 Event adminId string format: $adminIdFromEvent");
+              }
+
+              final matches = adminIdFromEvent == adminId;
+              print(
+                "🔍 Fallback filter - Event adminId: $adminIdFromEvent, Target: $adminId, Match: $matches",
+              );
+              return matches;
+            }).toList();
+
+            print(
+              "✅ Fallback filtering completed! Admin-specific events: ${adminEvents.length}",
+            );
+
+            return {
+              "success": true,
+              "message": "Admin events fetched successfully (fallback)",
+              "data": adminEvents,
+            };
+          } else {
+            print("❌ Fallback returned success: false - ${body["message"]}");
+            throw Exception(body["message"] ?? "Fallback failed");
+          }
+        } else {
+          throw Exception(
+            "Fallback server error: ${fallbackResponse.statusCode}",
+          );
+        }
+      } catch (fallbackError) {
+        print("🔥 Fallback also failed: $fallbackError");
+      }
+
+      throw Exception("Failed to fetch admin-specific events: $e");
+    }
+  }
+
   /// Get All Event Cards (Lightweight - without images)
   static Future<Map<String, dynamic>> _getAllEventCardsLightweight() async {
     print("🚀 Fetching event cards (lightweight mode)...");
@@ -1613,13 +1734,17 @@ class ApiService {
   }
 
   /// Get Event Card by ID
-  static Future<Map<String, dynamic>> getEventCardById(String id) async {
+  static Future<Map<String, dynamic>> getEventCardById({
+    required String id,
+    required String adminId,
+  }) async {
     try {
       print("🚀 Fetching event card by ID...");
       print("🆔 Event ID: $id");
-      print("🌐 URL: $eventsBaseUrl/$id");
+      print("👤 Admin ID: $adminId");
+      print("🌐 URL: $eventsBaseUrl/admin/$adminId/event/$id");
 
-      final url = Uri.parse("$eventsBaseUrl/$id");
+      final url = Uri.parse("$eventsBaseUrl/admin/$adminId/event/$id");
       final response = await http
           .get(
             url,
@@ -1710,7 +1835,7 @@ class ApiService {
       print("🚀 Updating event card...");
       print("🆔 Event ID: $id");
       print("👤 Admin ID: $adminId");
-      print("🌐 URL: $eventsBaseUrl/$id");
+      print("🌐 URL: $eventsBaseUrl/admin/$adminId/event/$id");
 
       final Map<String, dynamic> updateData = {"adminId": adminId};
 
@@ -1727,7 +1852,7 @@ class ApiService {
       if (eventdetails != null) updateData["eventdetails"] = eventdetails;
       if (status != null) updateData["status"] = status;
 
-      final url = Uri.parse("$eventsBaseUrl/$id");
+      final url = Uri.parse("$eventsBaseUrl/admin/$adminId/event/$id");
 
       // Add timeout and better error handling for large payloads
       final response = await http
@@ -1892,12 +2017,19 @@ class ApiService {
     try {
       print("🚀 Toggling event status...");
       print("🆔 Event ID: $id");
-      print("🌐 URL: $eventsBaseUrl/$id/toggle");
 
-      final url = Uri.parse("$eventsBaseUrl/$id/toggle");
+      // Get admin session for the toggle
+      String? adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        throw Exception("Admin not logged in");
+      }
+
+      print("🌐 URL: $eventsBaseUrl/admin/$adminId/event/$id/toggle");
+
       final response = await http.put(
-        url,
-        headers: {"Content-Type": "application/json"},
+        Uri.parse('$eventsBaseUrl/admin/$adminId/event/$id/toggle'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'adminId': adminId}),
       );
 
       print("📱 Toggle Event Status Response Status: ${response.statusCode}");
@@ -1910,7 +2042,7 @@ class ApiService {
         return {
           "success": true,
           "message": body["message"],
-          "status": body["status"],
+          "data": body["data"],
         };
       } else {
         print("❌ Toggle event status failed: ${body["message"]}");
@@ -1942,9 +2074,14 @@ class ApiService {
       print("\n🎯 Creating announcement card...");
       print("📝 Title: $title");
       print("⚡ Priority: $priority");
+      print("👤 Admin ID: $adminId");
+
+      // Try admin-specific endpoint first
+      final adminUrl = Uri.parse("$announcementsBaseUrl/admin/$adminId");
+      print("🌐 Primary URL: $adminUrl");
 
       final response = await http.post(
-        Uri.parse(announcementsBaseUrl),
+        adminUrl,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'title': title,
@@ -1954,31 +2091,89 @@ class ApiService {
         }),
       );
 
-      print("📡 Response status: ${response.statusCode}");
-      print("📄 Response body: ${response.body}");
+      print("📡 Primary Response Status: ${response.statusCode}");
+      print("📄 Primary Response Body: ${response.body}");
 
-      final body = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && body["success"] == true) {
-        print("✅ Announcement created successfully!");
-        return {
-          "success": true,
-          "message": body["message"],
-          "data": body["data"],
-        };
+      if (response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        if (body["success"] == true) {
+          print("✅ Announcement created successfully via admin endpoint!");
+          return {
+            "success": true,
+            "message": body["message"],
+            "data": body["data"],
+          };
+        } else {
+          print("❌ Admin endpoint returned success: false");
+          throw Exception(body["message"] ?? "Failed to create announcement");
+        }
+      } else if (response.statusCode == 400) {
+        // Handle validation errors (like duplicate titles) without fallback
+        final body = jsonDecode(response.body);
+        print("❌ Admin endpoint validation error: ${body["message"]}");
+        throw Exception(body["message"] ?? "Validation error");
       } else {
-        print("❌ Create announcement failed: ${body["message"]}");
-        throw Exception(body["message"] ?? "Failed to create announcement");
-      }
-    } catch (e) {
-      print("🔥 Error creating announcement: $e");
-      if (e.toString().contains('SocketException') ||
-          e.toString().contains('Connection refused') ||
-          e.toString().contains('Failed host lookup')) {
+        print("❌ Admin endpoint returned status: ${response.statusCode}");
+        // Try fallback to legacy endpoint for server errors only
         throw Exception(
-          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+          "Admin endpoint failed with status: ${response.statusCode}",
         );
       }
+    } catch (e) {
+      print("🔥 Primary endpoint error: $e");
+
+      // FALLBACK: Try legacy endpoint
+      try {
+        print("🔄 Trying fallback to legacy endpoint...");
+        final legacyUrl = Uri.parse(announcementsBaseUrl);
+        print("🌐 Fallback URL: $legacyUrl");
+
+        final fallbackResponse = await http.post(
+          legacyUrl,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'title': title,
+            'description': description,
+            'priority': priority,
+            'adminId': adminId,
+          }),
+        );
+
+        print("📡 Fallback Response Status: ${fallbackResponse.statusCode}");
+        print("📄 Fallback Response Body: ${fallbackResponse.body}");
+
+        if (fallbackResponse.statusCode == 201) {
+          final body = jsonDecode(fallbackResponse.body);
+          if (body["success"] == true) {
+            print("✅ Announcement created successfully via fallback endpoint!");
+            return {
+              "success": true,
+              "message": body["message"],
+              "data": body["data"],
+            };
+          } else {
+            print("❌ Fallback returned success: false");
+            throw Exception(body["message"] ?? "Failed to create announcement");
+          }
+        } else {
+          print("❌ Fallback returned status: ${fallbackResponse.statusCode}");
+          final body = jsonDecode(fallbackResponse.body);
+          throw Exception(
+            body["message"] ?? "Failed to create announcement via fallback",
+          );
+        }
+      } catch (fallbackError) {
+        print("🔥 Fallback also failed: $fallbackError");
+
+        if (fallbackError.toString().contains('SocketException') ||
+            fallbackError.toString().contains('Connection refused') ||
+            fallbackError.toString().contains('Failed host lookup')) {
+          throw Exception(
+            "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+          );
+        }
+      }
+
       throw Exception("Failed to create announcement: $e");
     }
   }
@@ -2037,6 +2232,142 @@ class ApiService {
     }
   }
 
+  /// Get announcement cards by admin ID (admin-specific filtering)
+  static Future<Map<String, dynamic>> getAnnouncementCardsByAdminId(
+    String adminId,
+  ) async {
+    try {
+      print("\n📋 Fetching announcements for admin ID: $adminId");
+      print("🌐 Primary URL: $announcementsBaseUrl/admin/$adminId");
+
+      // PRIMARY: Try the new admin-specific endpoint
+      final url = Uri.parse("$announcementsBaseUrl/admin/$adminId");
+      final response = await http
+          .get(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Connection": "close",
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print("📱 Primary Response Status: ${response.statusCode}");
+      print("📄 Primary Response Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body["success"] == true) {
+          print(
+            "✅ Admin announcements fetched successfully from primary endpoint!",
+          );
+          final announcementCount = body["data"] is List
+              ? body["data"].length
+              : 0;
+          print("📊 Primary endpoint announcements: $announcementCount");
+          return {
+            "success": true,
+            "message": "Admin announcements fetched successfully",
+            "data": body["data"],
+          };
+        } else {
+          print("❌ Primary endpoint returned success: false");
+          throw Exception(
+            body["message"] ?? "Failed to fetch admin announcements",
+          );
+        }
+      } else {
+        print("❌ Primary endpoint returned status: ${response.statusCode}");
+        throw Exception("Server error: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("🔥 Primary endpoint error: $e");
+
+      // FALLBACK: Try legacy route with adminId query parameter
+      print(
+        "🔄 Trying fallback to legacy route with adminId query parameter...",
+      );
+      try {
+        final fallbackUrl = Uri.parse("$announcementsBaseUrl?adminId=$adminId");
+        print("🌐 Fallback URL: $fallbackUrl");
+
+        final fallbackResponse = await http
+            .get(
+              fallbackUrl,
+              headers: {
+                "Content-Type": "application/json",
+                "Connection": "close",
+              },
+            )
+            .timeout(const Duration(seconds: 30));
+
+        print("📱 Fallback Response Status: ${fallbackResponse.statusCode}");
+        print("📄 Fallback Response Body: ${fallbackResponse.body}");
+
+        if (fallbackResponse.statusCode == 200) {
+          final body = jsonDecode(fallbackResponse.body);
+          if (body["success"] == true) {
+            final List<dynamic> allAnnouncements = body['data'] ?? [];
+            print(
+              "📊 Fallback total announcements received: ${allAnnouncements.length}",
+            );
+
+            // Additional client-side filtering for safety with object format handling
+            final adminAnnouncements = allAnnouncements.where((
+              announcementJson,
+            ) {
+              final announcementAdminId = announcementJson['adminId'];
+              String? adminIdFromAnnouncement;
+
+              // Handle both object and string formats
+              if (announcementAdminId is Map<String, dynamic>) {
+                // Backend returns: {_id: "68d664d7d84448fff5dc3a8b", email: "qwert123@gmail.com"}
+                adminIdFromAnnouncement = announcementAdminId['_id']
+                    ?.toString();
+                print(
+                  "🔍 Announcement adminId object format: $announcementAdminId -> extracted ID: $adminIdFromAnnouncement",
+                );
+              } else {
+                // Backend returns simple string
+                adminIdFromAnnouncement = announcementAdminId?.toString();
+                print(
+                  "🔍 Announcement adminId string format: $adminIdFromAnnouncement",
+                );
+              }
+
+              final matches = adminIdFromAnnouncement == adminId;
+              print(
+                "🔍 Fallback filter - Announcement adminId: $adminIdFromAnnouncement, Target: $adminId, Match: $matches",
+              );
+              return matches;
+            }).toList();
+
+            print(
+              "✅ Fallback filtering completed! Admin-specific announcements: ${adminAnnouncements.length}",
+            );
+
+            return {
+              "success": true,
+              "message": "Admin announcements fetched successfully (fallback)",
+              "data": adminAnnouncements,
+            };
+          } else {
+            print("❌ Fallback returned success: false - ${body["message"]}");
+            throw Exception(body["message"] ?? "Fallback failed");
+          }
+        } else {
+          throw Exception(
+            "Fallback server error: ${fallbackResponse.statusCode}",
+          );
+        }
+      } catch (fallbackError) {
+        print("🔥 Fallback also failed: $fallbackError");
+      }
+
+      throw Exception("Failed to fetch admin-specific announcements: $e");
+    }
+  }
+
   /// Get announcement card by ID
   static Future<Map<String, dynamic>> getAnnouncementCardById(String id) async {
     try {
@@ -2087,6 +2418,8 @@ class ApiService {
   }) async {
     try {
       print("\n✏️ Updating announcement ID: $id");
+      print("👤 Admin ID: $adminId");
+      print("🌐 URL: $announcementsBaseUrl/admin/$adminId/announcement/$id");
 
       final updateData = <String, dynamic>{'adminId': adminId};
       if (title != null) updateData['title'] = title;
@@ -2095,7 +2428,7 @@ class ApiService {
       if (isActive != null) updateData['isActive'] = isActive;
 
       final response = await http.put(
-        Uri.parse('$announcementsBaseUrl/$id'),
+        Uri.parse('$announcementsBaseUrl/admin/$adminId/announcement/$id'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(updateData),
       );

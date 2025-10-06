@@ -5,6 +5,7 @@ import 'modules.dart';
 import 'add_event.dart';
 import 'view_donations.dart';
 import '../../config/api_config.dart';
+import '../../services/admin_session_service.dart';
 
 class FestivalScreen extends StatelessWidget {
   const FestivalScreen({super.key});
@@ -116,19 +117,80 @@ class FestivalContentState extends State<FestivalContent> {
         _errorMessage = null;
       });
 
-      final response = await ApiService.getAllEventCards();
+      print('🚀 Starting _loadEvents...');
+
+      // Get current admin ID to filter events per admin
+      final adminId = await AdminSessionService.getAdminId();
+      print('🔍 Retrieved Admin ID: $adminId');
+
+      if (adminId == null) {
+        print('❌ Admin ID is null - session expired');
+        throw Exception('Admin session expired. Please login again.');
+      }
+
+      print('📡 Calling API with adminId: $adminId');
+      // Try to get admin-specific events from backend, fallback to client-side filtering
+      final response = await ApiService.getEventCardsByAdminId(adminId);
+      print('📦 API Response: ${response.toString()}');
 
       // Check again after the async call
       if (_isDisposed || !mounted) return;
 
       final List<dynamic> eventData = response['data'] ?? [];
+      print('📊 Raw event data length: ${eventData.length}');
+
+      // Log first event if any for debugging
+      if (eventData.isNotEmpty) {
+        print('🔍 First event sample: ${eventData.first}');
+      } else {
+        print('⚠️ No events returned from API');
+      }
+
+      // If backend doesn't support admin filtering, filter on frontend
+      final adminEvents = eventData.where((eventJson) {
+        final adminIdFromEvent = eventJson['adminId'];
+        String? adminIdString;
+
+        // Handle different adminId formats from backend
+        if (adminIdFromEvent is String) {
+          adminIdString = adminIdFromEvent;
+        } else if (adminIdFromEvent is Map && adminIdFromEvent['_id'] != null) {
+          adminIdString = adminIdFromEvent['_id'].toString();
+        } else {
+          adminIdString = adminIdFromEvent?.toString();
+        }
+
+        final matches = adminIdString == adminId;
+        print(
+          '🔍 Event "${eventJson['name']}" - adminId: $adminIdString, Current: $adminId, Matches: $matches',
+        );
+        return matches;
+      }).toList();
+
+      print('✅ Filtered admin events: ${adminEvents.length}');
 
       _safeSetState(() {
-        festivals = eventData.map((json) => Festival.fromJson(json)).toList();
+        festivals = adminEvents.map((json) => Festival.fromJson(json)).toList();
         _sortEvents(); // Sort events: active first, inactive at bottom
         _isLoading = false;
       });
+
+      print('🎯 Final festivals list: ${festivals.length}');
+
+      // Debug info
+      print('🔍 SUMMARY:');
+      print('🔍 Admin ID: $adminId');
+      print('🔍 Total events from backend: ${eventData.length}');
+      print('🔍 Admin-specific events: ${adminEvents.length}');
+      print('🔍 Festivals mapped: ${festivals.length}');
+
+      if (festivals.isEmpty) {
+        print(
+          '⚠️ No festivals to display - this will show "No Events Added yet"',
+        );
+      }
     } catch (e) {
+      print('❌ Error in _loadEvents: $e');
       _safeSetState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;

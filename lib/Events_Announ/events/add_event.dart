@@ -255,7 +255,7 @@ class _AddEventPageState extends State<AddEventPage> {
           eventdetails: eventDetails,
         );
 
-        final updatedEvent = Festival.fromJson(response['data']['event']);
+        final updatedEvent = Festival.fromJson(response['data']);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

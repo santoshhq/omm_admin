@@ -13,6 +13,19 @@ void main() async {
   // Add small delay to ensure platform channels are ready
   await Future.delayed(const Duration(milliseconds: 100));
 
+  // Suppress Flutter framework keyboard errors (known Flutter bug)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Ignore specific keyboard hardware key assertions
+    if (details.exception.toString().contains('_pressedKeys.containsKey') ||
+        details.exception.toString().contains('KeyUpEvent') ||
+        details.exception.toString().contains('hardware_keyboard.dart')) {
+      // Silently ignore these known Flutter framework bugs
+      return;
+    }
+    // Report other errors normally
+    FlutterError.presentError(details);
+  };
+
   // Wrap in try/catch to avoid platform channel errors with retry
   bool isLoggedIn = false;
   bool isProfileComplete = false;
