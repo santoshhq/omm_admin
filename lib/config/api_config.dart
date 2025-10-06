@@ -1436,7 +1436,7 @@ class ApiService {
     }
   }
 
-  /// Get Event Cards by Admin ID - Admin-specific filtering
+  /// Get Event Cards by Admin ID - Admin-specific filtering (with lightweight fallback)
   static Future<Map<String, dynamic>> getEventCardsByAdminId(
     String adminId,
   ) async {
@@ -1457,34 +1457,36 @@ class ApiService {
 
       print("📱 Primary Response Status: ${response.statusCode}");
 
+      // ✅ Primary endpoint success
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body["success"] == true) {
-          print("✅ Admin events fetched successfully from primary endpoint!");
           final eventCount = body["data"] is List ? body["data"].length : 0;
-          print("📊 Primary endpoint events: $eventCount");
+          print("✅ Admin events fetched successfully (primary)!");
+          print("📊 Events: $eventCount");
+
           return {
             "success": true,
             "message": "Admin events fetched successfully",
             "data": body["data"],
           };
         } else {
-          print("❌ Primary endpoint returned success: false");
+          print("❌ Primary returned success: false -> ${body["message"]}");
           throw Exception(body["message"] ?? "Failed to fetch admin events");
         }
       } else {
-        print("❌ Primary endpoint returned status: ${response.statusCode}");
+        print("❌ Primary endpoint failed: ${response.statusCode}");
         throw Exception("Server error: ${response.statusCode}");
       }
     } catch (e) {
       print("🔥 Primary endpoint error: $e");
+      print("🔄 Trying fallback to lightweight legacy route...");
 
-      // FALLBACK: Try legacy route with adminId query parameter
-      print(
-        "🔄 Trying fallback to legacy route with adminId query parameter...",
-      );
       try {
-        final fallbackUrl = Uri.parse("$eventsBaseUrl?adminId=$adminId");
+        // ✅ Lightweight fallback (no images)
+        final fallbackUrl = Uri.parse(
+          "$eventsBaseUrl?adminId=$adminId&lightweight=true",
+        );
         print("🌐 Fallback URL: $fallbackUrl");
 
         final fallbackResponse = await http
@@ -1495,64 +1497,70 @@ class ApiService {
                 "Connection": "close",
               },
             )
-            .timeout(const Duration(seconds: 30));
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                throw Exception("Fallback request timeout after 30 seconds");
+              },
+            );
 
         print("📱 Fallback Response Status: ${fallbackResponse.statusCode}");
 
-        if (fallbackResponse.statusCode == 200) {
-          final body = jsonDecode(fallbackResponse.body);
-          if (body["success"] == true) {
-            final List<dynamic> allEvents = body['data'] ?? [];
-            print("📊 Fallback total events received: ${allEvents.length}");
-
-            // Additional client-side filtering for safety with object format handling
-            final adminEvents = allEvents.where((eventJson) {
-              final eventAdminId = eventJson['adminId'];
-              String? adminIdFromEvent;
-
-              // Handle both object and string formats
-              if (eventAdminId is Map<String, dynamic>) {
-                // Backend returns: {_id: "68d664d7d84448fff5dc3a8b", email: "qwert123@gmail.com"}
-                adminIdFromEvent = eventAdminId['_id']?.toString();
-                print(
-                  "🔍 Event adminId object format: $eventAdminId -> extracted ID: $adminIdFromEvent",
-                );
-              } else {
-                // Backend returns simple string
-                adminIdFromEvent = eventAdminId?.toString();
-                print("🔍 Event adminId string format: $adminIdFromEvent");
-              }
-
-              final matches = adminIdFromEvent == adminId;
-              print(
-                "🔍 Fallback filter - Event adminId: $adminIdFromEvent, Target: $adminId, Match: $matches",
-              );
-              return matches;
-            }).toList();
-
-            print(
-              "✅ Fallback filtering completed! Admin-specific events: ${adminEvents.length}",
-            );
-
-            return {
-              "success": true,
-              "message": "Admin events fetched successfully (fallback)",
-              "data": adminEvents,
-            };
-          } else {
-            print("❌ Fallback returned success: false - ${body["message"]}");
-            throw Exception(body["message"] ?? "Fallback failed");
-          }
-        } else {
+        if (fallbackResponse.statusCode != 200) {
           throw Exception(
             "Fallback server error: ${fallbackResponse.statusCode}",
           );
         }
+
+        // ✅ Parse safely
+        late Map<String, dynamic> body;
+        try {
+          body = jsonDecode(fallbackResponse.body);
+        } catch (decodeError) {
+          print("❌ Invalid JSON from fallback: $decodeError");
+          throw Exception("Server returned invalid JSON in fallback mode");
+        }
+
+        if (body["success"] != true) {
+          throw Exception(body["message"] ?? "Fallback failed");
+        }
+
+        // ✅ Data extraction & admin filtering
+        final List<dynamic> allEvents = body['data'] ?? [];
+        print("📊 Fallback total events received: ${allEvents.length}");
+
+        final adminEvents = allEvents.where((eventJson) {
+          final eventAdminId = eventJson['adminId'];
+          String? adminIdFromEvent;
+
+          if (eventAdminId is Map<String, dynamic>) {
+            adminIdFromEvent = eventAdminId['_id']?.toString();
+            print("🔍 Event adminId object format -> ID: $adminIdFromEvent");
+          } else {
+            adminIdFromEvent = eventAdminId?.toString();
+            print("🔍 Event adminId string format: $adminIdFromEvent");
+          }
+
+          final match = adminIdFromEvent == adminId;
+          print("🔍 Match check: $adminIdFromEvent == $adminId => $match");
+          return match;
+        }).toList();
+
+        print(
+          "✅ Fallback filtering done! Admin-specific events: ${adminEvents.length}",
+        );
+
+        return {
+          "success": true,
+          "message": "Admin events fetched successfully (lightweight fallback)",
+          "data": adminEvents,
+        };
       } catch (fallbackError) {
         print("🔥 Fallback also failed: $fallbackError");
+        throw Exception(
+          "Failed to fetch admin-specific events (both endpoints failed): $fallbackError",
+        );
       }
-
-      throw Exception("Failed to fetch admin-specific events: $e");
     }
   }
 
@@ -1926,13 +1934,17 @@ class ApiService {
   }
 
   /// Delete Event Card
-  static Future<Map<String, dynamic>> deleteEventCard(String id) async {
+  static Future<Map<String, dynamic>> deleteEventCard({
+    required String id,
+    required String adminId,
+  }) async {
     try {
       print("🚀 Deleting event card...");
       print("🆔 Event ID: $id");
-      print("🌐 URL: $eventsBaseUrl/$id");
+      print("👤 Admin ID: $adminId");
+      print("🌐 URL: $eventsBaseUrl/admin/$adminId/event/$id");
 
-      final url = Uri.parse("$eventsBaseUrl/$id");
+      final url = Uri.parse("$eventsBaseUrl/admin/$adminId/event/$id");
       final response = await http.delete(
         url,
         headers: {"Content-Type": "application/json"},

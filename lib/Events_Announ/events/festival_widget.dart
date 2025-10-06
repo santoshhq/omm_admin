@@ -170,7 +170,20 @@ class FestivalContentState extends State<FestivalContent> {
       print('✅ Filtered admin events: ${adminEvents.length}');
 
       _safeSetState(() {
-        festivals = adminEvents.map((json) => Festival.fromJson(json)).toList();
+        festivals = adminEvents.map((json) {
+          print('🔍 Raw event data for ${json['name']}:');
+          print('🔍 - Images field: ${json['images']}');
+          print('🔍 - ImagePaths field: ${json['imagePaths']}');
+          print('🔍 - Image field: ${json['image']}');
+
+          final festival = Festival.fromJson(json);
+          print('🎯 Mapped festival: ${festival.name} (ID: ${festival.id})');
+          print('🎯 - Festival imagePaths: ${festival.imagePaths}');
+          print(
+            '🎯 - First image: ${festival.imagePaths.isNotEmpty ? festival.imagePaths.first : 'NO IMAGES'}',
+          );
+          return festival;
+        }).toList();
         _sortEvents(); // Sort events: active first, inactive at bottom
         _isLoading = false;
       });
@@ -236,7 +249,13 @@ class FestivalContentState extends State<FestivalContent> {
       );
 
       if (confirmed == true) {
-        await ApiService.deleteEventCard(festival.id!);
+        // Get admin ID for the delete operation
+        String? adminId = await AdminSessionService.getAdminId();
+        if (adminId == null) {
+          throw Exception("Admin not logged in");
+        }
+
+        await ApiService.deleteEventCard(id: festival.id!, adminId: adminId);
 
         // Remove the item from local list instead of refreshing entire list
         _safeSetState(() {
@@ -317,6 +336,16 @@ class FestivalContentState extends State<FestivalContent> {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      return _buildContent(context);
+    } catch (e, stackTrace) {
+      print('❌ Critical error in FestivalContent build: $e');
+      print('Stack trace: $stackTrace');
+      return _buildErrorWidget(e.toString());
+    }
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -388,53 +417,104 @@ class FestivalContentState extends State<FestivalContent> {
                       child: ListView.builder(
                         itemCount: festivals.length,
                         itemBuilder: (context, index) {
-                          final fest = festivals[index];
+                          try {
+                            final fest = festivals[index];
 
-                          final double progress = (fest.targetAmount != 0)
-                              ? (fest.collectedAmount / fest.targetAmount)
-                                    .clamp(0.0, 1.0)
-                              : 0.0;
+                            final double progress = (fest.targetAmount != 0)
+                                ? (fest.collectedAmount / fest.targetAmount)
+                                      .clamp(0.0, 1.0)
+                                : 0.0;
 
-                          return Slidable(
-                            key: ValueKey('${fest.name}_$index'),
-                            groupTag:
-                                'festival_group', // Ensures only one slidable is open at a time
-                            closeOnScroll: true,
-                            startActionPane: null, // Disable left swipe
-                            endActionPane: ActionPane(
-                              motion: const DrawerMotion(),
-                              extentRatio:
-                                  0.4, // controls how much space the actions take
-                              children: [
-                                SlidableAction(
-                                  onPressed: (ctx) => _editEvent(index),
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  icon: Icons.edit,
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    bottomLeft: Radius.circular(16),
+                            return Slidable(
+                              key: ValueKey('${fest.name}_$index'),
+                              groupTag:
+                                  'festival_group', // Ensures only one slidable is open at a time
+                              closeOnScroll: true,
+                              startActionPane: null, // Disable left swipe
+                              endActionPane: ActionPane(
+                                motion: const DrawerMotion(),
+                                extentRatio:
+                                    0.4, // controls how much space the actions take
+                                children: [
+                                  SlidableAction(
+                                    onPressed: (ctx) => _editEvent(index),
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    icon: Icons.edit,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(16),
+                                      bottomLeft: Radius.circular(16),
+                                    ),
+                                  ),
+                                  SlidableAction(
+                                    onPressed: (ctx) => _deleteEvent(index),
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    icon: Icons.delete,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(16),
+                                      bottomRight: Radius.circular(16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              child: _buildEventImage(
+                                fest,
+                                progress,
+                                index,
+                                context,
+                              ),
+                            );
+                          } catch (e, stackTrace) {
+                            print(
+                              '❌ Error building event card at index $index: $e',
+                            );
+                            print('Stack trace: $stackTrace');
+
+                            // Return a safe error card instead of crashing
+                            return Card(
+                              margin: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 4,
+                              ),
+                              child: Container(
+                                height: 120,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.red.shade200,
                                   ),
                                 ),
-                                SlidableAction(
-                                  onPressed: (ctx) => _deleteEvent(index),
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                  icon: Icons.delete,
-                                  borderRadius: const BorderRadius.only(
-                                    topRight: Radius.circular(16),
-                                    bottomRight: Radius.circular(16),
-                                  ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red.shade600,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Error loading event',
+                                      style: TextStyle(
+                                        color: Colors.red.shade700,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Index: $index',
+                                      style: TextStyle(
+                                        color: Colors.red.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: _buildEventImage(
-                              fest,
-                              progress,
-                              index,
-                              context,
-                            ),
-                          );
+                              ),
+                            );
+                          }
                         },
                       ),
                     ),
@@ -442,6 +522,63 @@ class FestivalContentState extends State<FestivalContent> {
                 ],
               ),
             ),
+    );
+  }
+
+  /// Build error widget for critical failures
+  Widget _buildErrorWidget(String error) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          border: Border.all(color: Colors.red.shade200),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            const Text(
+              'App Error',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Something went wrong while loading the events.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red.shade700),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _errorMessage = null;
+                });
+                _loadEvents();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Retry'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                print('Debug error: $error');
+              },
+              child: const Text('Show Details'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -687,77 +824,152 @@ class FestivalContentState extends State<FestivalContent> {
     );
   }
 
-  /// Simple placeholder image widget for festival.
-  /// Avoids referencing fields that may or may not exist in `Festival`.
+  /// Robust image widget with comprehensive error handling
   Widget _buildEventImageWidget(Festival fest) {
+    print('🖼️ Building image widget for event: ${fest.name}');
+    print('🖼️ - ImagePaths array: ${fest.imagePaths}');
+    print('🖼️ - Array length: ${fest.imagePaths.length}');
+
     // Use first image from imagePaths array
     if (fest.imagePaths.isEmpty) {
-      return Icon(
-        Icons.celebration,
-        size: 30,
-        color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
-      );
+      print('🖼️ - No images found, showing placeholder for: ${fest.name}');
+      return _buildPlaceholderIcon(fest);
     }
 
     final String imagePath = fest.imagePaths.first;
+    print('🖼️ - Selected image path: "$imagePath"');
+    print('🖼️ - Path length: ${imagePath.length}');
+
+    // Validate image path
+    if (imagePath.trim().isEmpty) {
+      print('⚠️ Empty image path for event: ${fest.name}');
+      return _buildPlaceholderIcon(fest);
+    }
 
     // Handle base64 images
     if (imagePath.startsWith('data:image')) {
-      try {
-        final base64String = imagePath.split(',')[1];
-        final bytes = base64.decode(base64String);
-        return Image.memory(
+      print('🖼️ - Detected base64 image for: ${fest.name}');
+      return _buildBase64Image(imagePath, fest);
+    }
+
+    // Handle network images
+    print('🖼️ - Detected network image for: ${fest.name}');
+    return _buildNetworkImage(imagePath, fest);
+  }
+
+  /// Build placeholder icon
+  Widget _buildPlaceholderIcon(Festival fest) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: (fest.isActive ? Colors.deepOrange : const Color(0xFF455A64))
+            .withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+          width: 1,
+        ),
+      ),
+      child: Icon(
+        Icons.celebration,
+        size: 30,
+        color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+      ),
+    );
+  }
+
+  /// Build base64 image with error handling
+  Widget _buildBase64Image(String imagePath, Festival fest) {
+    try {
+      // Validate base64 format
+      if (!imagePath.contains(',')) {
+        print('⚠️ Invalid base64 format for event: ${fest.name}');
+        return _buildPlaceholderIcon(fest);
+      }
+
+      final base64String = imagePath.split(',')[1];
+
+      // Validate base64 string
+      if (base64String.trim().isEmpty) {
+        print('⚠️ Empty base64 string for event: ${fest.name}');
+        return _buildPlaceholderIcon(fest);
+      }
+
+      final bytes = base64.decode(base64String);
+
+      // Validate decoded bytes
+      if (bytes.isEmpty) {
+        print('⚠️ Empty image bytes for event: ${fest.name}');
+        return _buildPlaceholderIcon(fest);
+      }
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
           bytes,
           width: 60,
           height: 60,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
-            return Icon(
-              Icons.celebration,
-              size: 30,
-              color: fest.isActive
-                  ? Colors.deepOrange
-                  : const Color(0xFF455A64),
-            );
+            print('❌ Base64 image load error for ${fest.name}: $error');
+            return _buildPlaceholderIcon(fest);
           },
-        );
-      } catch (e) {
-        return Icon(
-          Icons.celebration,
-          size: 30,
-          color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
-        );
-      }
+        ),
+      );
+    } catch (e) {
+      print('❌ Base64 decode error for ${fest.name}: $e');
+      return _buildPlaceholderIcon(fest);
+    }
+  }
+
+  /// Build network image with error handling
+  Widget _buildNetworkImage(String imagePath, Festival fest) {
+    // Validate URL format
+    if (!imagePath.startsWith('http')) {
+      print('⚠️ Invalid URL format for event ${fest.name}: $imagePath');
+      return _buildPlaceholderIcon(fest);
     }
 
-    // Handle network images
-    return Image.network(
-      imagePath,
-      width: 60,
-      height: 60,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return Icon(
-          Icons.celebration,
-          size: 30,
-          color: fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
-        );
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          width: 60,
-          height: 60,
-          child: Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        imagePath,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          print('❌ Network image load error for ${fest.name}: $error');
+          return _buildPlaceholderIcon(fest);
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    fest.isActive ? Colors.deepOrange : const Color(0xFF455A64),
+                  ),
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
