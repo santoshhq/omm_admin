@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'security_module.dart';
 import 'security_form.dart';
 import 'maid_form.dart';
+import '../services/admin_session_service.dart';
+import '../config/api_config.dart';
 
 class SecurityDashboardPage extends StatefulWidget {
   const SecurityDashboardPage({super.key});
@@ -12,11 +15,42 @@ class SecurityDashboardPage extends StatefulWidget {
 
 class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
   bool _showGuards = true; // default selected option should be guards
+  List<SecurityGuardModel> _guards = [];
+  bool _loadingGuards = false;
+  String? _guardsError;
 
   @override
   void initState() {
     super.initState();
+    _fetchGuards();
     securityModule.addListener(_onModuleChanged);
+  }
+
+  Future<void> _fetchGuards() async {
+    setState(() {
+      _loadingGuards = true;
+      _guardsError = null;
+    });
+    String? adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      setState(() {
+        _guardsError = 'Admin session not found.';
+        _loadingGuards = false;
+      });
+      return;
+    }
+    try {
+      final guards = await ApiService.getAllGuards(adminId);
+      setState(() {
+        _guards = guards;
+        _loadingGuards = false;
+      });
+    } catch (e) {
+      setState(() {
+        _guardsError = 'Failed to load guards.';
+        _loadingGuards = false;
+      });
+    }
   }
 
   @override
@@ -46,7 +80,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                   MaterialPageRoute(builder: (_) => const SecurityFormPage()),
                 ).then((newGuard) {
                   if (newGuard != null && newGuard is SecurityGuardModel) {
-                    securityModule.addGuard(newGuard);
+                    _fetchGuards(); // Refresh list after adding
                   }
                 });
               },
@@ -103,18 +137,43 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
     String? imageUrl,
     IconData defaultIcon = Icons.person,
   }) {
+    Widget avatar;
+    final hasImage = imageUrl != null && imageUrl.trim().isNotEmpty;
+    if (hasImage && imageUrl!.startsWith('data:image/')) {
+      // Base64 image
+      try {
+        final base64Str = imageUrl.split(',').last;
+        avatar = CircleAvatar(
+          radius: 24,
+          backgroundImage: MemoryImage(base64Decode(base64Str)),
+        );
+      } catch (e) {
+        avatar = CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.grey[300],
+          child: Icon(defaultIcon, color: Colors.grey[700]),
+        );
+      }
+    } else if (hasImage) {
+      // Network image
+      avatar = CircleAvatar(
+        radius: 24,
+        backgroundImage: NetworkImage(imageUrl!),
+      );
+    } else {
+      // Fallback icon
+      avatar = CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey[300],
+        child: Icon(defaultIcon, color: Colors.grey[700]),
+      );
+    }
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: imageUrl != null
-            ? CircleAvatar(backgroundImage: NetworkImage(imageUrl), radius: 24)
-            : CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.grey[300],
-                child: Icon(defaultIcon, color: Colors.grey[700]),
-              ),
+        leading: avatar,
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: subtitle != null ? Text(subtitle) : null,
       ),
@@ -173,14 +232,25 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  ...securityModule.securityGuards.map(
-                    (g) => _buildPersonCard(
-                      name: '${g.firstName} ${g.lastName}',
-                      subtitle:
-                          'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
-                      imageUrl: g.imageUrl,
+                  if (_loadingGuards)
+                    const Center(child: CircularProgressIndicator()),
+                  if (_guardsError != null)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        _guardsError!,
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
-                  ),
+                  if (!_loadingGuards && _guardsError == null)
+                    ..._guards.map(
+                      (g) => _buildPersonCard(
+                        name: '${g.firstName} ${g.lastName}',
+                        subtitle:
+                            'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
+                        imageUrl: g.imageUrl,
+                      ),
+                    ),
                 ],
               )
             else

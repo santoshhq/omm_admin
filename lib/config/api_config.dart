@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:omm_admin/security_guards/security_module.dart';
 import '../services/admin_session_service.dart';
 
 class ApiService {
@@ -3014,6 +3015,108 @@ class ApiService {
         );
       }
       throw Exception("Failed to delete message: $e");
+    }
+  }
+
+  // 🔹 Dynamic base URL based on platform
+  static String get securitybaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/security-guards";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/security-guards";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/security-guards";
+    }
+  }
+
+  /// Convert image file to base64 string
+  static Future<String?> convertImageToBase64(File? imageFile) async {
+    if (imageFile == null) return null;
+    final bytes = await imageFile.readAsBytes();
+    return "data:image/jpeg;base64,${base64Encode(bytes)}";
+  }
+
+  /// ✅ Create a new Security Guard
+  static Future<Map<String, dynamic>> createSecurityGuard({
+    required String adminId,
+    required SecurityGuardModel guard,
+    File? imageFile,
+  }) async {
+    try {
+      String? base64Image = await convertImageToBase64(imageFile);
+
+      final body = guard.toJson(adminId);
+      if (base64Image != null) body['guardimage'] = base64Image;
+
+      final response = await http.post(
+        Uri.parse("$securitybaseUrl/admin/$adminId"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"status": false, "message": e.toString()};
+    }
+  }
+
+  /// ✅ Fetch all Security Guards by adminId
+  static Future<List<SecurityGuardModel>> getAllGuards(String adminId) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$securitybaseUrl/admin/$adminId"),
+      );
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final List<dynamic> list = jsonData['data'];
+        return list.map((e) => SecurityGuardModel.fromJson(e)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// ✅ Update an existing Security Guard
+  static Future<Map<String, dynamic>> updateSecurityGuard({
+    required String guardId,
+    required SecurityGuardModel updatedGuard,
+    File? imageFile,
+  }) async {
+    try {
+      String? base64Image = await convertImageToBase64(imageFile);
+
+      final body = updatedGuard.toJson(updatedGuard.adminId);
+      if (base64Image != null) body['guardimage'] = base64Image;
+
+      final response = await http.put(
+        Uri.parse("$securitybaseUrl/$guardId"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"status": false, "message": e.toString()};
+    }
+  }
+
+  /// ✅ Delete a Security Guard
+  static Future<Map<String, dynamic>> deleteSecurityGuard(
+    String guardId,
+  ) async {
+    try {
+      final response = await http.delete(
+        Uri.parse("$securitybaseUrl/$guardId"),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"status": false, "message": e.toString()};
     }
   }
 }

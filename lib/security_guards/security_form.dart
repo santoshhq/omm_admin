@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'security_module.dart';
+import '../services/admin_session_service.dart';
+import '../config/api_config.dart';
 
 class SecurityFormPage extends StatefulWidget {
   const SecurityFormPage({super.key});
@@ -19,6 +21,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
   String? _gate;
   String? _gender;
   File? _imageFile;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -29,23 +32,112 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.camera);
+    final picked = await picker.pickImage(source: source);
     if (picked != null) {
       setState(() => _imageFile = File(picked.path));
     }
   }
 
-  void _onAdd() {
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Select Image Source'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF455A64)),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library,
+                color: Color(0xFF455A64),
+              ),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onAdd() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_gender == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select gender')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    String? adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin session not found. Please log in again.'),
+        ),
+      );
+      return;
+    }
+
     final guard = SecurityGuardModel(
+      adminId: adminId,
       firstName: _first.text.trim(),
       lastName: _last.text.trim(),
       age: int.parse(_age.text.trim()),
       mobile: _mobile.text.trim(),
       assignedGate: _gate!,
-      gender: _gender ?? 'Male',
+      gender: (_gender ?? 'Male').toLowerCase(),
+      imageUrl: _imageFile?.path,
+    );
+
+    final result = await ApiService.createSecurityGuard(
+      adminId: adminId,
+      guard: guard,
+      imageFile: _imageFile,
+    );
+
+    setState(() => _isLoading = false);
+
+    print('Create Guard API result:');
+    print(result);
+
+    if (result['status'] == false || result['success'] == false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message']?.toString() ?? 'Failed to add guard.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        //   behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+        content: Text(
+          ' Security guard added successfully!',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
     );
     Navigator.pop(context, guard);
   }
@@ -73,32 +165,80 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
 
   Widget _buildGenderOption(String value, IconData icon) {
     final selected = _gender == value;
-    return GestureDetector(
-      onTap: () => setState(() => _gender = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF455A64) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? Colors.blueAccent : Colors.grey.shade400,
-            width: selected ? 2 : 1,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _gender = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF455A64) : Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xFF455A64) : Colors.grey.shade400,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: selected ? Colors.white : Colors.black54,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: selected ? Colors.white : Colors.black54),
-            const SizedBox(width: 8),
-            Text(
-              value,
+      ),
+    );
+  }
+
+  Widget _buildGateOption(String gate) {
+    final selected = _gate == gate;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _gate = gate),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF455A64) : Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xFF455A64) : Colors.grey.shade400,
+              width: selected ? 2 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF455A64).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Center(
+            child: Text(
+              gate,
               style: TextStyle(
                 color: selected ? Colors.white : Colors.black87,
                 fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -157,7 +297,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                       bottom: 0,
                       right: 0,
                       child: GestureDetector(
-                        onTap: _pickImage,
+                        onTap: _showImageSourceDialog,
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -226,25 +366,48 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Gate Dropdown
-              DropdownButtonFormField<String>(
-                value: _gate,
-                items: ['G1', 'G2', 'G3', 'G4', 'G5', 'G6']
-                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                    .toList(),
-                onChanged: (v) => setState(() => _gate = v),
-                decoration: _inputDecoration("Assigned Gate"),
-                validator: (v) => v == null ? 'Select gate' : null,
-              ),
               const SizedBox(height: 24),
 
-              // Gender Selection (Enhanced)
+              // Gate Selection (Enhanced - 6 options in a row)
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'Assigned Gate',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  _buildGateOption('G1'),
+                  _buildGateOption('G2'),
+                  _buildGateOption('G3'),
+                  _buildGateOption('G4'),
+                  _buildGateOption('G5'),
+                  _buildGateOption('G6'),
+                ],
+              ),
+              if (_gate == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Select gate',
+                    style: TextStyle(color: Colors.red[700], fontSize: 12),
+                  ),
+                ),
+              const SizedBox(height: 24),
+
+              // Gender Selection
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'Gender',
                     style: TextStyle(
@@ -256,9 +419,9 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                 ),
               ),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildGenderOption('Male', Icons.male),
+                  const SizedBox(width: 12),
                   _buildGenderOption('Female', Icons.female),
                 ],
               ),
@@ -270,9 +433,9 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                     style: TextStyle(color: Colors.red[700], fontSize: 12),
                   ),
                 ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-              // Add Button
+              // Add Button with Loading
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -282,12 +445,28 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 2,
                   ),
-                  onPressed: _onAdd,
-                  child: const Text(
-                    'Add',
-                    style: TextStyle(fontSize: 18, color: Colors.white),
-                  ),
+                  onPressed: _isLoading ? null : _onAdd,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Add Security Guard',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ),
             ],

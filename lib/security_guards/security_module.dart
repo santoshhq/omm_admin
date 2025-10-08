@@ -1,23 +1,56 @@
 import 'package:flutter/material.dart';
 
+// lib/models/security_guard_model.dart
+
 class SecurityGuardModel {
+  String? id;
+  String adminId;
   String firstName;
   String lastName;
   int age;
   String mobile;
   String assignedGate;
-  String? imageUrl;
   String gender;
+  String? imageUrl;
 
   SecurityGuardModel({
+    this.id,
+    required this.adminId,
     required this.firstName,
     required this.lastName,
     required this.age,
     required this.mobile,
     required this.assignedGate,
-    this.imageUrl,
     required this.gender,
+    this.imageUrl,
   });
+
+  factory SecurityGuardModel.fromJson(Map<String, dynamic> json) {
+    return SecurityGuardModel(
+      id: json['_id'],
+      adminId: json['adminId'] ?? '',
+      firstName: json['firstname'],
+      lastName: json['lastname'],
+      age: json['age'],
+      mobile: json['mobilenumber'],
+      assignedGate: json['assigngates'],
+      gender: json['gender'],
+      imageUrl: json['guardimage'],
+    );
+  }
+
+  Map<String, dynamic> toJson(String adminId) {
+    return {
+      "adminId": adminId,
+      "guardimage": imageUrl,
+      "firstname": firstName,
+      "lastname": lastName,
+      "mobilenumber": mobile,
+      "age": age,
+      "assigngates": assignedGate,
+      "gender": gender.toLowerCase(),
+    };
+  }
 }
 
 class MaidModel {
@@ -44,7 +77,7 @@ class MaidModel {
 
 // Dummy data for testing
 List<SecurityGuardModel> dummySecurityGuards = [
-  SecurityGuardModel(
+  /* SecurityGuardModel(
     firstName: "John",
     lastName: "Doe",
     age: 30,
@@ -59,7 +92,7 @@ List<SecurityGuardModel> dummySecurityGuards = [
     mobile: "9876543211",
     assignedGate: "G2",
     gender: 'Female',
-  ),
+  ),*/
 ];
 
 List<MaidModel> dummyMaids = [
