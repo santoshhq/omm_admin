@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'security_module.dart';
 import 'security_form.dart';
 import 'maid_form.dart';
@@ -106,6 +107,74 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
     );
   }
 
+  void _editGuard(int index) async {
+    final guard = _guards[index];
+    final updatedGuard = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SecurityFormPage(guard: guard)),
+    );
+    if (updatedGuard != null && updatedGuard is SecurityGuardModel) {
+      setState(() {
+        _guards[index] = updatedGuard;
+      });
+    }
+  }
+
+  Future<void> _deleteGuard(int index) async {
+    final guard = _guards[index];
+    if (guard.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot delete: Guard ID is missing.')),
+      );
+      return;
+    }
+    String? adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin session not found.')));
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Security Guard'),
+        content: Text(
+          'Are you sure you want to delete ${guard.firstName} ${guard.lastName}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      final result = await ApiService.deleteSecurityGuard(adminId, guard.id!);
+      if (result['status'] == true || result['success'] == true) {
+        setState(() {
+          _guards.removeAt(index);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Security guard deleted.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ?? 'Failed to delete guard.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildToggleButton(String label, bool active, VoidCallback onTap) {
     return Expanded(
       child: GestureDetector(
@@ -136,10 +205,12 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
     String? subtitle,
     String? imageUrl,
     IconData defaultIcon = Icons.person,
+    int? index,
+    bool slidable = false,
   }) {
     Widget avatar;
     final hasImage = imageUrl != null && imageUrl.trim().isNotEmpty;
-    if (hasImage && imageUrl!.startsWith('data:image/')) {
+    if (hasImage && imageUrl.startsWith('data:image/')) {
       // Base64 image
       try {
         final base64Str = imageUrl.split(',').last;
@@ -158,7 +229,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
       // Network image
       avatar = CircleAvatar(
         radius: 24,
-        backgroundImage: NetworkImage(imageUrl!),
+        backgroundImage: NetworkImage(imageUrl),
       );
     } else {
       // Fallback icon
@@ -168,7 +239,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
         child: Icon(defaultIcon, color: Colors.grey[700]),
       );
     }
-    return Card(
+    Widget card = Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -178,6 +249,43 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
         subtitle: subtitle != null ? Text(subtitle) : null,
       ),
     );
+    if (slidable && index != null) {
+      card = Slidable(
+        key: ValueKey('guard_$index'),
+        groupTag: 'guard_group',
+        closeOnScroll: true,
+        //  autoClose: true,
+        startActionPane: null,
+        endActionPane: ActionPane(
+          motion: const DrawerMotion(),
+          extentRatio: 0.4,
+          children: [
+            SlidableAction(
+              onPressed: (ctx) => _editGuard(index),
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              icon: Icons.edit,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+              ),
+            ),
+            SlidableAction(
+              onPressed: (ctx) => _deleteGuard(index),
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              icon: Icons.delete,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+            ),
+          ],
+        ),
+        child: card,
+      );
+    }
+    return card;
   }
 
   @override
@@ -243,12 +351,34 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                       ),
                     ),
                   if (!_loadingGuards && _guardsError == null)
-                    ..._guards.map(
-                      (g) => _buildPersonCard(
-                        name: '${g.firstName} ${g.lastName}',
-                        subtitle:
-                            'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
-                        imageUrl: g.imageUrl,
+                    SizedBox(
+                      height: 420,
+                      child: SlidableAutoCloseBehavior(
+                        child: _guards.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No security guards assigned.',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: _guards.length,
+                                itemBuilder: (context, idx) {
+                                  final g = _guards[idx];
+                                  return _buildPersonCard(
+                                    name: '${g.firstName} ${g.lastName}',
+                                    subtitle:
+                                        'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
+                                    imageUrl: g.imageUrl,
+                                    index: idx,
+                                    slidable: true,
+                                  );
+                                },
+                              ),
                       ),
                     ),
                 ],

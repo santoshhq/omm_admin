@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,7 +7,8 @@ import '../services/admin_session_service.dart';
 import '../config/api_config.dart';
 
 class SecurityFormPage extends StatefulWidget {
-  const SecurityFormPage({super.key});
+  final SecurityGuardModel? guard;
+  const SecurityFormPage({Key? key, this.guard}) : super(key: key);
 
   @override
   State<SecurityFormPage> createState() => _SecurityFormPageState();
@@ -21,7 +23,32 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
   String? _gate;
   String? _gender;
   File? _imageFile;
+  String? _existingImageUrl;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.guard != null) {
+      _first.text = widget.guard!.firstName;
+      _last.text = widget.guard!.lastName;
+      _age.text = widget.guard!.age.toString();
+      _mobile.text = widget.guard!.mobile;
+      _gate = widget.guard!.assignedGate;
+      // Map backend gender value to display value
+      final g = widget.guard!.gender.trim().toLowerCase();
+      if (g == 'male') {
+        _gender = 'Male';
+      } else if (g == 'female') {
+        _gender = 'Female';
+      } else if (g == 'other') {
+        _gender = 'Other';
+      } else {
+        _gender = null;
+      }
+      _existingImageUrl = widget.guard!.imageUrl;
+    }
+  }
 
   @override
   void dispose() {
@@ -74,72 +101,72 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
     );
   }
 
-  Future<void> _onAdd() async {
+  Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_gender == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select gender')));
-      return;
-    }
-
     setState(() => _isLoading = true);
-
-    String? adminId = await AdminSessionService.getAdminId();
-    if (adminId == null) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Admin session not found. Please log in again.'),
-        ),
+    try {
+      String? adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Admin session not found. Please log in again.'),
+          ),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+      final isEdit = widget.guard != null && widget.guard!.id != null;
+      final guard = SecurityGuardModel(
+        id: isEdit ? widget.guard!.id : null,
+        adminId: adminId,
+        firstName: _first.text.trim(),
+        lastName: _last.text.trim(),
+        age: int.parse(_age.text.trim()),
+        mobile: _mobile.text.trim(),
+        assignedGate: _gate!,
+        gender: (_gender ?? 'Male').toLowerCase(),
+        imageUrl: _imageFile?.path ?? _existingImageUrl,
       );
-      return;
-    }
-
-    final guard = SecurityGuardModel(
-      adminId: adminId,
-      firstName: _first.text.trim(),
-      lastName: _last.text.trim(),
-      age: int.parse(_age.text.trim()),
-      mobile: _mobile.text.trim(),
-      assignedGate: _gate!,
-      gender: (_gender ?? 'Male').toLowerCase(),
-      imageUrl: _imageFile?.path,
-    );
-
-    final result = await ApiService.createSecurityGuard(
-      adminId: adminId,
-      guard: guard,
-      imageFile: _imageFile,
-    );
-
-    setState(() => _isLoading = false);
-
-    print('Create Guard API result:');
-    print(result);
-
-    if (result['status'] == false || result['success'] == false) {
+      Map<String, dynamic> result;
+      if (isEdit) {
+        result = await ApiService.updateSecurityGuard(
+          guardId: guard.id!,
+          updatedGuard: guard,
+          imageFile: _imageFile,
+        );
+      } else {
+        result = await ApiService.createSecurityGuard(
+          adminId: adminId,
+          guard: guard,
+          imageFile: _imageFile,
+        );
+      }
+      print('Guard API result:');
+      print(result);
+      if (result['status'] == false || result['success'] == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ?? 'Failed to save guard.',
+            ),
+          ),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result['message']?.toString() ?? 'Failed to add guard.',
+            isEdit
+                ? 'Security guard updated successfully!'
+                : 'Security guard added successfully!',
           ),
         ),
       );
-      return;
+      Navigator.pop(context, guard);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        //   behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.green,
-        content: Text(
-          ' Security guard added successfully!',
-          style: const TextStyle(color: Colors.white),
-        ),
-      ),
-    );
-    Navigator.pop(context, guard);
   }
 
   InputDecoration _inputDecoration(String label, {String? prefix}) {
@@ -271,8 +298,21 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                       backgroundColor: Colors.grey.shade200,
                       backgroundImage: _imageFile != null
                           ? FileImage(_imageFile!)
+                          : (_existingImageUrl != null &&
+                                _existingImageUrl!.isNotEmpty)
+                          ? (_existingImageUrl!.startsWith('data:image/')
+                                ? MemoryImage(
+                                    base64Decode(
+                                      _existingImageUrl!.split(',').last,
+                                    ),
+                                  )
+                                : NetworkImage(_existingImageUrl!)
+                                      as ImageProvider)
                           : null,
-                      child: _imageFile == null
+                      child:
+                          (_imageFile == null &&
+                              (_existingImageUrl == null ||
+                                  _existingImageUrl!.isEmpty))
                           ? Container(
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
@@ -435,36 +475,40 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                 ),
               const SizedBox(height: 32),
 
-              // Add Button with Loading
+              // Add/Update Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF455A64),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  onPressed: _isLoading ? null : _onSubmit,
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.all(
+                      const Color(0xFF455A64),
                     ),
-                    elevation: 2,
+                    padding: MaterialStateProperty.all(
+                      const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    shape: MaterialStateProperty.all(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
-                  onPressed: _isLoading ? null : _onAdd,
                   child: _isLoading
                       ? const SizedBox(
-                          height: 20,
-                          width: 20,
+                          width: 24,
+                          height: 24,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               Colors.white,
                             ),
+                            strokeWidth: 2.5,
                           ),
                         )
-                      : const Text(
-                          'Add Security Guard',
-                          style: TextStyle(
+                      : Text(
+                          widget.guard != null ? 'Update' : 'Add',
+                          style: const TextStyle(
                             fontSize: 18,
                             color: Colors.white,
-                            fontWeight: FontWeight.bold,
                           ),
                         ),
                 ),

@@ -3091,11 +3091,19 @@ class ApiService {
     try {
       String? base64Image = await convertImageToBase64(imageFile);
 
-      final body = updatedGuard.toJson(updatedGuard.adminId);
-      if (base64Image != null) body['guardimage'] = base64Image;
+      // Build body to match backend schema
+      final body = {
+        'firstname': updatedGuard.firstName,
+        'lastname': updatedGuard.lastName,
+        'mobilenumber': updatedGuard.mobile,
+        'age': updatedGuard.age,
+        'assigngates': updatedGuard.assignedGate,
+        'gender': updatedGuard.gender,
+        if (base64Image != null) 'guardimage': base64Image,
+      };
 
       final response = await http.put(
-        Uri.parse("$securitybaseUrl/$guardId"),
+        Uri.parse("$securitybaseUrl/admin/${updatedGuard.adminId}/$guardId"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(body),
       );
@@ -3108,11 +3116,12 @@ class ApiService {
 
   /// ✅ Delete a Security Guard
   static Future<Map<String, dynamic>> deleteSecurityGuard(
+    String adminId,
     String guardId,
   ) async {
     try {
       final response = await http.delete(
-        Uri.parse("$securitybaseUrl/$guardId"),
+        Uri.parse("$securitybaseUrl/admin/$adminId/$guardId"),
       );
       return jsonDecode(response.body);
     } catch (e) {
