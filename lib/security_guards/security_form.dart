@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'security_module.dart';
 import '../services/admin_session_service.dart';
 import '../config/api_config.dart';
@@ -63,7 +64,22 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source);
     if (picked != null) {
-      setState(() => _imageFile = File(picked.path));
+      // Compress the image
+      final originalBytes = await File(picked.path).readAsBytes();
+      final decoded = img.decodeImage(originalBytes);
+      if (decoded != null) {
+        // Resize to max 600px width, keep aspect ratio, and compress to 70% quality
+        final resized = img.copyResize(decoded, width: 600);
+        final compressedBytes = img.encodeJpg(resized, quality: 70);
+        // Save to a temp file
+        final tempPath = '${picked.path}_compressed.jpg';
+        final compressedFile = await File(
+          tempPath,
+        ).writeAsBytes(compressedBytes);
+        setState(() => _imageFile = compressedFile);
+      } else {
+        setState(() => _imageFile = File(picked.path));
+      }
     }
   }
 
