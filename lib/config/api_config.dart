@@ -2483,7 +2483,7 @@ class ApiService {
       print("\n🗑️ Deleting announcement ID: $id");
 
       final response = await http.delete(
-        Uri.parse('$announcementsBaseUrl/$id'),
+        Uri.parse('$announcementsBaseUrl/admin/$adminId/announcement/$id'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'adminId': adminId}),
       );
@@ -2526,7 +2526,9 @@ class ApiService {
       print("\n🔄 Toggling announcement status for ID: $id");
 
       final response = await http.put(
-        Uri.parse('$announcementsBaseUrl/$id/toggle'),
+        Uri.parse(
+          '$announcementsBaseUrl/admin/$adminId/announcement/$id/toggle',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'adminId': adminId}),
       );
