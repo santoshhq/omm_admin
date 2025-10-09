@@ -3021,14 +3021,12 @@ class ApiService {
   // 🔹 Dynamic base URL based on platform
   static String get securitybaseUrl {
     if (Platform.isAndroid) {
-      // For Android emulator, use 10.0.2.2 to access host machine
-      return "http://10.0.2.2:8080/api/security-guards";
+      return "http://10.0.2.2:8080/api/security";
     } else if (Platform.isIOS) {
-      // For iOS simulator, use localhost or your machine's IP
-      return "http://localhost:8080/api/security-guards";
+      return "http://localhost:8080/api/security";
     } else {
       // For web/desktop development
-      return "http://localhost:8080/api/security-guards";
+      return "http://localhost:8080/api/security";
     }
   }
 
@@ -3039,60 +3037,91 @@ class ApiService {
     return "data:image/jpeg;base64,${base64Encode(bytes)}";
   }
 
-  /// ✅ Create a new Security Guard
   static Future<Map<String, dynamic>> createSecurityGuard({
     required String adminId,
     required SecurityGuardModel guard,
     File? imageFile,
   }) async {
     try {
+      final uri = Uri.parse('$securitybaseUrl/admin/$adminId');
       String? base64Image = await convertImageToBase64(imageFile);
 
-      final body = guard.toJson(adminId);
-      if (base64Image != null) body['guardimage'] = base64Image;
+      final body = jsonEncode({
+        'adminId': adminId,
+        'firstname': guard.firstName,
+        'lastname': guard.lastName,
+        'age': guard.age,
+        'mobilenumber': guard.mobile,
+        'assigngates': guard.assignedGate,
+        'gender': guard.gender,
+        'guardimage': base64Image,
+      });
 
       final response = await http.post(
-        Uri.parse("$securitybaseUrl/admin/$adminId"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(body),
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: body,
       );
 
-      return jsonDecode(response.body);
+      print('🟢 Create Guard Response Code: ${response.statusCode}');
+      print('🟢 Create Guard Response Body: ${response.body}');
+
+      if (response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        return {'status': false, 'message': 'Failed to create guard'};
+      }
     } catch (e) {
-      return {"status": false, "message": e.toString()};
+      print('🔴 Error in createSecurityGuard: $e');
+      return {'status': false, 'message': e.toString()};
     }
   }
 
-  /// ✅ Fetch all Security Guards by adminId
+  /// ✅ Fetch all Security Guards by adminId (with debug)
   static Future<List<SecurityGuardModel>> getAllGuards(String adminId) async {
     try {
-      final response = await http.get(
-        Uri.parse("$securitybaseUrl/admin/$adminId"),
-      );
+      final url = "$securitybaseUrl/admin/$adminId";
+      print("🟢 Fetching Security Guards from: $url");
+
+      final response = await http.get(Uri.parse(url));
+
+      print("🟢 Response Status Code: ${response.statusCode}");
+      print("🟢 Response Body: ${response.body}");
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        final List<dynamic> list = jsonData['data'];
-        return list.map((e) => SecurityGuardModel.fromJson(e)).toList();
+        if (jsonData['status'] == true && jsonData['data'] is List) {
+          final List<dynamic> list = jsonData['data'];
+          print("🟢 Total Guards Fetched: ${list.length}");
+          return list.map((e) => SecurityGuardModel.fromJson(e)).toList();
+        } else {
+          print("🔴 Error: Backend status false or data not a list");
+          return [];
+        }
       } else {
+        print("🔴 Error: Unexpected status code ${response.statusCode}");
         return [];
       }
     } catch (e) {
+      print("🔴 Exception in getAllGuards: $e");
       return [];
     }
   }
 
-  /// ✅ Update an existing Security Guard
+  /// ✅ Update an existing Security Guard by adminId and guardId
   static Future<Map<String, dynamic>> updateSecurityGuard({
+    required String adminId,
     required String guardId,
     required SecurityGuardModel updatedGuard,
     File? imageFile,
   }) async {
     try {
-      String? base64Image = await convertImageToBase64(imageFile);
+      String? base64Image;
+      if (imageFile != null) {
+        base64Image = await convertImageToBase64(imageFile);
+      }
 
-      // Build body to match backend schema
-      final body = {
+      final Map<String, dynamic> updateData = {
         'firstname': updatedGuard.firstName,
         'lastname': updatedGuard.lastName,
         'mobilenumber': updatedGuard.mobile,
@@ -3102,15 +3131,24 @@ class ApiService {
         if (base64Image != null) 'guardimage': base64Image,
       };
 
+      final url = Uri.parse('$securitybaseUrl/admin/$adminId/$guardId');
       final response = await http.put(
-        Uri.parse("$securitybaseUrl/admin/${updatedGuard.adminId}/$guardId"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(body),
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(updateData),
       );
 
-      return jsonDecode(response.body);
+      print('🟢 Update Guard Response Code: ${response.statusCode}');
+      print('🟢 Update Guard Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {'status': false, 'message': 'Failed to update guard'};
+      }
     } catch (e) {
-      return {"status": false, "message": e.toString()};
+      print('🔴 Error in updateSecurityGuard: $e');
+      return {'status': false, 'message': e.toString()};
     }
   }
 

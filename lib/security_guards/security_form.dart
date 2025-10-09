@@ -146,6 +146,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
       Map<String, dynamic> result;
       if (isEdit) {
         result = await ApiService.updateSecurityGuard(
+          adminId: adminId,
           guardId: guard.id!,
           updatedGuard: guard,
           imageFile: _imageFile,

@@ -28,7 +28,10 @@ class SecurityGuardModel {
   factory SecurityGuardModel.fromJson(Map<String, dynamic> json) {
     return SecurityGuardModel(
       id: json['_id'],
-      adminId: json['adminId'] ?? '',
+      adminId: json['adminId'] is Map
+          ? json['adminId']['_id']
+          : json['adminId'],
+
       firstName: json['firstname'],
       lastName: json['lastname'],
       age: json['age'],

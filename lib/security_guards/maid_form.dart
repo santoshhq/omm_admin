@@ -15,19 +15,19 @@ class _MaidFormPageState extends State<MaidFormPage> {
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _age = TextEditingController();
-  final _flats = TextEditingController();
   final _timings = TextEditingController();
   final _mobile = TextEditingController();
 
   File? _imageFile;
   String? _gender;
+  // String? _gate; // old single gate
+  List<String> _selectedGates = [];
 
   @override
   void dispose() {
     _first.dispose();
     _last.dispose();
     _age.dispose();
-    _flats.dispose();
     _timings.dispose();
     _mobile.dispose();
     super.dispose();
@@ -41,11 +41,15 @@ class _MaidFormPageState extends State<MaidFormPage> {
 
   void _onAdd() {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedGates.isEmpty) {
+      setState(() {}); // trigger error message
+      return;
+    }
     final maid = MaidModel(
       firstName: _first.text.trim(),
       lastName: _last.text.trim(),
       age: int.parse(_age.text.trim()),
-      workingFlats: _flats.text.trim(),
+      workingFlats: _selectedGates.join(','),
       timings: _timings.text.trim(),
       mobile: _mobile.text.trim().isEmpty ? null : _mobile.text.trim(),
       imageUrl: _imageFile?.path,
@@ -82,6 +86,42 @@ class _MaidFormPageState extends State<MaidFormPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGateOption(String gate) {
+    final selected = _selectedGates.contains(gate);
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (selected) {
+            _selectedGates.remove(gate);
+          } else {
+            _selectedGates.add(gate);
+          }
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF455A64) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? const Color(0xFF455A64) : Colors.grey.shade400,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          gate,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.black87,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
         ),
       ),
     );
@@ -172,38 +212,6 @@ class _MaidFormPageState extends State<MaidFormPage> {
               ),
               const SizedBox(height: 14),
 
-              // Gender Selection (Enhanced)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Gender',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildGenderOption('Male', Icons.male),
-                  _buildGenderOption('Female', Icons.female),
-                ],
-              ),
-              if (_gender == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Select gender',
-                    style: TextStyle(color: Colors.red[700], fontSize: 12),
-                  ),
-                ),
-              const SizedBox(height: 14),
-
               // Age
               TextFormField(
                 controller: _age,
@@ -246,32 +254,72 @@ class _MaidFormPageState extends State<MaidFormPage> {
               ),
               const SizedBox(height: 14),
 
-              // Working flats
-              TextFormField(
-                controller: _flats,
-                decoration: InputDecoration(
-                  labelText: 'Working flats (e.g. 101, 102)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'Assigned Floors',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.grey[800],
+                    ),
                   ),
-                  prefixIcon: const Icon(Icons.apartment),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _buildGateOption('I'),
+                  _buildGateOption('II'),
+                  _buildGateOption('III'),
+                  _buildGateOption('IV'),
+                  _buildGateOption('V'),
+                  _buildGateOption('VI'),
+                ],
+              ),
+              if (_selectedGates.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Select at least one floor',
+                    style: TextStyle(color: Colors.red[700], fontSize: 12),
+                  ),
+                ),
+
+              // Gender Selection (Enhanced)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Gender',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildGenderOption('Male', Icons.male),
+                  _buildGenderOption('Female', Icons.female),
+                ],
+              ),
+              if (_gender == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Select gender',
+                    style: TextStyle(color: Colors.red[700], fontSize: 12),
+                  ),
+                ),
 
               // Timings
-              TextFormField(
-                controller: _timings,
-                decoration: InputDecoration(
-                  labelText: 'Timings (e.g. 9am - 5pm)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  prefixIcon: const Icon(Icons.access_time),
-                ),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
               const SizedBox(height: 24),
 
               // Add button

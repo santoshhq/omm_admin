@@ -351,34 +351,63 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                       ),
                     ),
                   if (!_loadingGuards && _guardsError == null)
-                    SizedBox(
-                      height: 420,
-                      child: SlidableAutoCloseBehavior(
-                        child: _guards.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No security guards assigned.',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
+                    Container(
+                      constraints: const BoxConstraints(
+                        minHeight: 200,
+                        maxHeight: 600,
+                      ),
+                      child: Stack(
+                        children: [
+                          SlidableAutoCloseBehavior(
+                            child: _guards.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'No security guards assigned.',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    itemCount: _guards.length,
+                                    itemBuilder: (context, idx) {
+                                      final g = _guards[idx];
+                                      return _buildPersonCard(
+                                        name: '${g.firstName} ${g.lastName}',
+                                        subtitle:
+                                            'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
+                                        imageUrl: g.imageUrl,
+                                        index: idx,
+                                        slidable: true,
+                                      );
+                                    },
+                                  ),
+                          ),
+                          // Fade effect at bottom to hint scrolling
+                          if (_guards.isNotEmpty)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: IgnorePointer(
+                                child: Container(
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.white.withOpacity(0.8),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              )
-                            : ListView.builder(
-                                itemCount: _guards.length,
-                                itemBuilder: (context, idx) {
-                                  final g = _guards[idx];
-                                  return _buildPersonCard(
-                                    name: '${g.firstName} ${g.lastName}',
-                                    subtitle:
-                                        'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
-                                    imageUrl: g.imageUrl,
-                                    index: idx,
-                                    slidable: true,
-                                  );
-                                },
                               ),
+                            ),
+                        ],
                       ),
                     ),
                 ],
