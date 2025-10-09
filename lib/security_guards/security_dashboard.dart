@@ -43,7 +43,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
     try {
       final guards = await ApiService.getAllGuards(adminId);
       setState(() {
-        _guards = guards;
+        _guards = guards.reversed.toList(); // Show newest first
         _loadingGuards = false;
       });
     } catch (e) {
@@ -294,151 +294,219 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
       appBar: AppBar(
         title: const Text(
           'Security & Staff',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
         ),
-        backgroundColor: const Color(0xFF455A64),
+        backgroundColor: const Color(0xFF263238),
         iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 4,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Toggle Buttons
-            Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    _buildToggleButton(
-                      'Guards',
-                      _showGuards,
-                      () => setState(() => _showGuards = true),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildToggleButton(
-                      'Maids',
-                      !_showGuards,
-                      () => setState(() => _showGuards = false),
-                    ),
-                  ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF5F7FA), Color(0xFFE8EAF6)],
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with subtitle
+
+              // Toggle Buttons
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: Row(
+                    children: [
+                      _buildToggleButton(
+                        'Guards',
+                        _showGuards,
+                        () => setState(() => _showGuards = true),
+                      ),
+                      const SizedBox(width: 10),
+                      _buildToggleButton(
+                        'Maids',
+                        !_showGuards,
+                        () => setState(() => _showGuards = false),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 18),
 
-            // Guards List
-            if (_showGuards)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Security Guards',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              // Guards List
+              if (_showGuards)
+                Card(
+                  elevation: 3,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 8),
-                  if (_loadingGuards)
-                    const Center(child: CircularProgressIndicator()),
-                  if (_guardsError != null)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        _guardsError!,
-                        style: TextStyle(color: Colors.red),
-                      ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 18,
+                      horizontal: 12,
                     ),
-                  if (!_loadingGuards && _guardsError == null)
-                    Container(
-                      constraints: const BoxConstraints(
-                        minHeight: 200,
-                        maxHeight: 600,
-                      ),
-                      child: Stack(
-                        children: [
-                          SlidableAutoCloseBehavior(
-                            child: _guards.isEmpty
-                                ? Center(
-                                    child: Text(
-                                      'No security guards assigned.',
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    itemCount: _guards.length,
-                                    itemBuilder: (context, idx) {
-                                      final g = _guards[idx];
-                                      return _buildPersonCard(
-                                        name: '${g.firstName} ${g.lastName}',
-                                        subtitle:
-                                            'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
-                                        imageUrl: g.imageUrl,
-                                        index: idx,
-                                        slidable: true,
-                                      );
-                                    },
-                                  ),
-                          ),
-                          // Fade effect at bottom to hint scrolling
-                          if (_guards.isNotEmpty)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: IgnorePointer(
-                                child: Container(
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.white.withOpacity(0.8),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.shield, color: Color(0xFF455A64)),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Security Guards',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF263238),
                               ),
                             ),
-                        ],
-                      ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (_loadingGuards)
+                          const Center(child: CircularProgressIndicator()),
+                        if (_guardsError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              _guardsError!,
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        if (!_loadingGuards && _guardsError == null)
+                          Container(
+                            constraints: const BoxConstraints(
+                              minHeight: 200,
+                              maxHeight: 600,
+                            ),
+                            child: Stack(
+                              children: [
+                                SlidableAutoCloseBehavior(
+                                  child: _guards.isEmpty
+                                      ? Center(
+                                          child: Text(
+                                            'No security guards assigned.',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        )
+                                      : ListView.builder(
+                                          itemCount: _guards.length,
+                                          itemBuilder: (context, idx) {
+                                            final g = _guards[idx];
+                                            return _buildPersonCard(
+                                              name:
+                                                  '${g.firstName} ${g.lastName}',
+                                              subtitle:
+                                                  'Gate: ${g.assignedGate} • Age: ${g.age} • Mobile: ${g.mobile}',
+                                              imageUrl: g.imageUrl,
+                                              index: idx,
+                                              slidable: true,
+                                            );
+                                          },
+                                        ),
+                                ),
+                                // Fade effect at bottom to hint scrolling
+                                if (_guards.isNotEmpty)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: IgnorePointer(
+                                      child: Container(
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Colors.transparent,
+                                              Colors.white.withOpacity(0.8),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              )
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Maids',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  ...securityModule.maids.map(
-                    (m) => _buildPersonCard(
-                      name: '${m.firstName} ${m.lastName}',
-                      subtitle:
-                          'Flats: ${m.workingFlats} • Timings: ${m.timings} • Mobile: ${m.mobile ?? '-'}',
-                      imageUrl: m.imageUrl,
-                      defaultIcon: Icons.person_pin,
+                )
+              else
+                Card(
+                  elevation: 3,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 18,
+                      horizontal: 12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.cleaning_services,
+                              color: Color(0xFF388E3C),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Maids',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF263238),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ...securityModule.maids.map(
+                          (m) => _buildPersonCard(
+                            name: '${m.firstName} ${m.lastName}',
+                            subtitle:
+                                'Flats: ${m.workingFlats} • Timings: ${m.timings} • Mobile: ${m.mobile ?? '-'}',
+                            imageUrl: m.imageUrl,
+                            defaultIcon: Icons.person_pin,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-          ],
+                ),
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddOptions,
-        backgroundColor: const Color(0xFF455A64),
+        backgroundColor: const Color(0xFF263238),
         child: const Icon(Icons.add, color: Colors.white),
+        elevation: 4,
       ),
     );
   }

@@ -144,6 +144,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
         imageUrl: _imageFile?.path ?? _existingImageUrl,
       );
       Map<String, dynamic> result;
+      SecurityGuardModel? returnedGuard;
       if (isEdit) {
         result = await ApiService.updateSecurityGuard(
           adminId: adminId,
@@ -151,12 +152,19 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
           updatedGuard: guard,
           imageFile: _imageFile,
         );
+        if (result['status'] == true && result['data'] != null) {
+          returnedGuard = SecurityGuardModel.fromJson(result['data']);
+        }
       } else {
         result = await ApiService.createSecurityGuard(
           adminId: adminId,
           guard: guard,
           imageFile: _imageFile,
         );
+        if ((result['status'] == true || result['success'] == true) &&
+            result['data'] != null) {
+          returnedGuard = SecurityGuardModel.fromJson(result['data']);
+        }
       }
       print('Guard API result:');
       print(result);
@@ -180,7 +188,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
           ),
         ),
       );
-      Navigator.pop(context, guard);
+      Navigator.pop(context, returnedGuard ?? guard);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
