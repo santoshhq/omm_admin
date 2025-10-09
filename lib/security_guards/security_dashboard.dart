@@ -597,7 +597,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                                               ),
                                               SlidableAction(
                                                 onPressed: (ctx) async {
-                                                  if (m['id'] == null) {
+                                                  if (m['_id'] == null) {
                                                     ScaffoldMessenger.of(
                                                       context,
                                                     ).showSnackBar(
@@ -663,7 +663,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                                                     final result =
                                                         await ApiService.deleteHousekeepingStaff(
                                                           adminId: adminId,
-                                                          staffId: m['id'],
+                                                          staffId: m['_id'],
                                                         );
                                                     if (result['status'] ==
                                                             true ||

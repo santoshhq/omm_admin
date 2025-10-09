@@ -3240,25 +3240,39 @@ class ApiService {
     File? imageFile,
   }) async {
     try {
+      String? base64Image;
       if (imageFile != null) {
-        updateData['personimage'] = await convertImageToBase64(imageFile);
+        base64Image = await convertImageToBase64(imageFile);
       }
-      // Make sure housekeepingBaseUrl is '/api/housekeeping'
+
+      // Add image to updateData if present
+      final Map<String, dynamic> dataToSend = Map<String, dynamic>.from(
+        updateData,
+      );
+      if (base64Image != null) {
+        dataToSend['personimage'] = base64Image;
+      }
+
       final url = Uri.parse('$housekeepingBaseUrl/admin/$adminId/$staffId');
       final response = await http.put(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(updateData),
+        body: jsonEncode(dataToSend),
       );
+
+      print('🟢 Update Housekeeping Response Code: ${response.statusCode}');
+      print('🟢 Update Housekeeping Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
         return {
           'status': false,
-          'message': 'Failed to update staff: ${response.body}',
+          'message': 'Failed to update housekeeping staff',
         };
       }
     } catch (e) {
+      print('🔴 Error in updateHousekeepingStaff: $e');
       return {'status': false, 'message': e.toString()};
     }
   }

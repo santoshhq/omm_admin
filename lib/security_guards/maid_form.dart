@@ -7,6 +7,7 @@ import 'package:omm_admin/config/api_config.dart';
 import 'package:omm_admin/services/admin_session_service.dart';
 import 'security_module.dart';
 // Import your ApiService for housekeeping
+import 'package:collection/collection.dart';
 
 class MaidFormPage extends StatefulWidget {
   final Map<String, dynamic>? maid;
@@ -125,19 +126,41 @@ class _MaidFormPageState extends State<MaidFormPage> {
 
     Map<String, dynamic> result;
 
-    if (widget.maid != null && widget.maid!['id'] != null) {
-      final updateData = {
-        'id': widget.maid!['id'], // include id for backend duplicate check
-        'firstname': _first.text.trim(),
-        'lastname': _last.text.trim(),
-        'mobilenumber': _mobile.text.trim(),
-        'age': int.parse(_age.text.trim()),
-        'assignfloors': _selectedGates,
-        'gender': (_gender ?? 'Female').toLowerCase(),
-      };
+    if (widget.maid != null && widget.maid!['_id'] != null) {
+      // Only send changed fields
+      final Map<String, dynamic> updateData = {};
+      final m = widget.maid!;
+      if (_first.text.trim() != (m['firstname'] ?? '')) {
+        updateData['firstname'] = _first.text.trim();
+      }
+      if (_last.text.trim() != (m['lastname'] ?? '')) {
+        updateData['lastname'] = _last.text.trim();
+      }
+      if (_mobile.text.trim() != (m['mobilenumber'] ?? '')) {
+        updateData['mobilenumber'] = _mobile.text.trim();
+      }
+      if (_age.text.trim() != (m['age']?.toString() ?? '')) {
+        updateData['age'] = int.parse(_age.text.trim());
+      }
+      if (!ListEquality().equals(
+        _selectedGates,
+        (m['assignfloors'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      )) {
+        updateData['assignfloors'] = _selectedGates;
+      }
+      if ((_gender ?? 'Female').toLowerCase() !=
+          (m['gender'] ?? 'female').toString().toLowerCase()) {
+        updateData['gender'] = (_gender ?? 'Female').toLowerCase();
+      }
+
+      // Always send at least one field if nothing changed (to avoid empty update)
+      if (updateData.isEmpty && _imageFile == null) {
+        updateData['firstname'] = _first.text.trim();
+      }
+
       result = await ApiService.updateHousekeepingStaff(
         adminId: adminId,
-        staffId: widget.maid!['id'],
+        staffId: widget.maid!['_id'],
         updateData: updateData,
         imageFile: _imageFile,
       );
@@ -461,7 +484,7 @@ class _MaidFormPageState extends State<MaidFormPage> {
                   ),
                   onPressed: _onAdd,
                   child: Text(
-                    widget.maid != null ? 'Update Maid' : 'Add Maid',
+                    widget.maid != null ? 'Update ' : 'Add ',
                     style: const TextStyle(fontSize: 18, color: Colors.white),
                   ),
                 ),
