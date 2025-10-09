@@ -88,7 +88,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
             ),
             ListTile(
               leading: const Icon(Icons.cleaning_services, color: Colors.green),
-              title: const Text('Add Maid'),
+              title: const Text('Add Housekeeping'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -336,7 +336,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                       ),
                       const SizedBox(width: 10),
                       _buildToggleButton(
-                        'Maids',
+                        'Housekeeping Staff',
                         !_showGuards,
                         () => setState(() => _showGuards = false),
                       ),
@@ -475,7 +475,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                             ),
                             const SizedBox(width: 8),
                             const Text(
-                              'Maids',
+                              'Housekeeping Staff',
                               style: TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.bold,
