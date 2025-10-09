@@ -3166,4 +3166,114 @@ class ApiService {
       return {"status": false, "message": e.toString()};
     }
   }
+
+  //Housekeeper APIs Section
+  // 🔹 Dynamic base URL based on platform
+  static String get housekeepingBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/housekeeping";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/housekeeping";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/housekeeping";
+    }
+  }
+
+  /// Create Housekeeping Staff
+  static Future<Map<String, dynamic>> createHousekeepingStaff({
+    required String adminId,
+    required String firstname,
+    required String lastname,
+    required int age,
+    required List<String> assignfloors,
+    required String mobilenumber,
+    required String gender,
+    File? imageFile,
+  }) async {
+    try {
+      String? base64Image = await convertImageToBase64(imageFile);
+      final url = Uri.parse('$housekeepingBaseUrl/admin/$adminId');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'adminId': adminId,
+          'firstname': firstname,
+          'lastname': lastname,
+          'age': age,
+          'assignfloors': assignfloors,
+          'mobilenumber': mobilenumber,
+          'gender': gender,
+          'personimage': base64Image,
+        }),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'message': e.toString()};
+    }
+  }
+
+  /// Get all housekeeping staff for an admin
+  static Future<List<Map<String, dynamic>>> getAllHousekeepingStaff(
+    String adminId,
+  ) async {
+    try {
+      final url = '$housekeepingBaseUrl/admin/$adminId';
+      final response = await http.get(Uri.parse(url));
+      final jsonData = jsonDecode(response.body);
+      if (jsonData['status'] == true && jsonData['data'] is List) {
+        return List<Map<String, dynamic>>.from(jsonData['data']);
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Update housekeeping staff
+  static Future<Map<String, dynamic>> updateHousekeepingStaff({
+    required String adminId,
+    required String staffId,
+    required Map<String, dynamic> updateData,
+    File? imageFile,
+  }) async {
+    try {
+      if (imageFile != null) {
+        updateData['personimage'] = await convertImageToBase64(imageFile);
+      }
+      // Make sure housekeepingBaseUrl is '/api/housekeeping'
+      final url = Uri.parse('$housekeepingBaseUrl/admin/$adminId/$staffId');
+      final response = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(updateData),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'status': false,
+          'message': 'Failed to update staff: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {'status': false, 'message': e.toString()};
+    }
+  }
+
+  /// Delete housekeeping staff
+  static Future<Map<String, dynamic>> deleteHousekeepingStaff({
+    required String adminId,
+    required String staffId,
+  }) async {
+    try {
+      final url = Uri.parse('$housekeepingBaseUrl/admin/$adminId/$staffId');
+      final response = await http.delete(url);
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'message': e.toString()};
+    }
+  }
 }

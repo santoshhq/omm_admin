@@ -20,11 +20,16 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
   bool _loadingGuards = false;
   String? _guardsError;
 
+  List<Map<String, dynamic>> _maids = [];
+  bool _loadingMaids = false;
+  String? _maidsError;
+
   @override
   void initState() {
     super.initState();
     _fetchGuards();
     securityModule.addListener(_onModuleChanged);
+    _fetchMaids();
   }
 
   Future<void> _fetchGuards() async {
@@ -62,6 +67,33 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
 
   void _onModuleChanged() => setState(() {});
 
+  Future<void> _fetchMaids() async {
+    setState(() {
+      _loadingMaids = true;
+      _maidsError = null;
+    });
+    String? adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      setState(() {
+        _maidsError = 'Admin session not found.';
+        _loadingMaids = false;
+      });
+      return;
+    }
+    try {
+      final maids = await ApiService.getAllHousekeepingStaff(adminId);
+      setState(() {
+        _maids = maids.reversed.toList();
+        _loadingMaids = false;
+      });
+    } catch (e) {
+      setState(() {
+        _maidsError = 'Failed to load housekeeping staff.';
+        _loadingMaids = false;
+      });
+    }
+  }
+
   void _showAddOptions() {
     showModalBottomSheet(
       context: context,
@@ -95,8 +127,11 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                   context,
                   MaterialPageRoute(builder: (_) => const MaidFormPage()),
                 ).then((newMaid) {
-                  if (newMaid != null) {
-                    securityModule.addMaid(newMaid);
+                  if (newMaid != null && newMaid is Map<String, dynamic>) {
+                    setState(() {
+                      _maids.insert(0, newMaid);
+                      _showGuards = false; // Switch to housekeeping staff tab
+                    });
                   }
                 });
               },
@@ -485,15 +520,209 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        ...securityModule.maids.map(
-                          (m) => _buildPersonCard(
-                            name: '${m.firstName} ${m.lastName}',
-                            subtitle:
-                                'Flats: ${m.workingFlats} • Timings: ${m.timings} • Mobile: ${m.mobile ?? '-'}',
-                            imageUrl: m.imageUrl,
-                            defaultIcon: Icons.person_pin,
+                        if (_loadingMaids)
+                          const Center(child: CircularProgressIndicator()),
+                        if (_maidsError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              _maidsError!,
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ),
-                        ),
+                        if (!_loadingMaids && _maidsError == null)
+                          Container(
+                            constraints: const BoxConstraints(
+                              minHeight: 200,
+                              maxHeight: 600,
+                            ),
+                            child: _maids.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'No housekeeping staff assigned.',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  )
+                                : SlidableAutoCloseBehavior(
+                                    child: ListView.builder(
+                                      itemCount: _maids.length,
+                                      itemBuilder: (context, idx) {
+                                        final m = _maids[idx];
+                                        return Slidable(
+                                          key: ValueKey('maid_$idx'),
+                                          groupTag: 'maid_group',
+                                          closeOnScroll: true,
+                                          endActionPane: ActionPane(
+                                            motion: const DrawerMotion(),
+                                            extentRatio: 0.4,
+                                            children: [
+                                              SlidableAction(
+                                                onPressed: (ctx) async {
+                                                  final updatedMaid =
+                                                      await Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              MaidFormPage(
+                                                                maid: m,
+                                                              ),
+                                                        ),
+                                                      );
+                                                  if (updatedMaid != null &&
+                                                      updatedMaid
+                                                          is Map<
+                                                            String,
+                                                            dynamic
+                                                          >) {
+                                                    setState(() {
+                                                      _maids[idx] = updatedMaid;
+                                                    });
+                                                  }
+                                                },
+                                                backgroundColor: Colors.blue,
+                                                foregroundColor: Colors.white,
+                                                icon: Icons.edit,
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                      topLeft: Radius.circular(
+                                                        16,
+                                                      ),
+                                                      bottomLeft:
+                                                          Radius.circular(16),
+                                                    ),
+                                              ),
+                                              SlidableAction(
+                                                onPressed: (ctx) async {
+                                                  if (m['id'] == null) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Cannot delete: Maid ID is missing.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  }
+                                                  String? adminId =
+                                                      await AdminSessionService.getAdminId();
+                                                  if (adminId == null) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Admin session not found.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  }
+                                                  final confirm = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (context) => AlertDialog(
+                                                      title: const Text(
+                                                        'Delete Housekeeping Staff',
+                                                      ),
+                                                      content: Text(
+                                                        'Are you sure you want to delete \'${m['firstname'] ?? ''} ${m['lastname'] ?? ''}\'?',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                false,
+                                                              ),
+                                                          child: const Text(
+                                                            'Cancel',
+                                                          ),
+                                                        ),
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                true,
+                                                              ),
+                                                          child: const Text(
+                                                            'Delete',
+                                                            style: TextStyle(
+                                                              color: Colors.red,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (confirm == true) {
+                                                    final result =
+                                                        await ApiService.deleteHousekeepingStaff(
+                                                          adminId: adminId,
+                                                          staffId: m['id'],
+                                                        );
+                                                    if (result['status'] ==
+                                                            true ||
+                                                        result['success'] ==
+                                                            true) {
+                                                      setState(() {
+                                                        _maids.removeAt(idx);
+                                                      });
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text(
+                                                            'Housekeeping staff deleted.',
+                                                          ),
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(
+                                                            result['message']
+                                                                    ?.toString() ??
+                                                                'Failed to delete staff.',
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  }
+                                                },
+                                                backgroundColor: Colors.red,
+                                                foregroundColor: Colors.white,
+                                                icon: Icons.delete,
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                      topRight: Radius.circular(
+                                                        16,
+                                                      ),
+                                                      bottomRight:
+                                                          Radius.circular(16),
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                          child: _buildPersonCard(
+                                            name:
+                                                '${m['firstname'] ?? ''} ${m['lastname'] ?? ''}',
+                                            subtitle:
+                                                'Floors: ${(m['assignfloors'] as List?)?.join(', ') ?? '-'} • Age: ${m['age'] ?? '-'} • Mobile: ${m['mobilenumber'] ?? '-'}',
+                                            imageUrl: m['personimage'],
+                                            defaultIcon: Icons.person_pin,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ),
                       ],
                     ),
                   ),

@@ -1,10 +1,16 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:image/image.dart' as img;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:omm_admin/config/api_config.dart';
+import 'package:omm_admin/services/admin_session_service.dart';
 import 'security_module.dart';
+// Import your ApiService for housekeeping
 
 class MaidFormPage extends StatefulWidget {
-  const MaidFormPage({super.key});
+  final Map<String, dynamic>? maid;
+  const MaidFormPage({Key? key, this.maid}) : super(key: key);
 
   @override
   State<MaidFormPage> createState() => _MaidFormPageState();
@@ -20,8 +26,23 @@ class _MaidFormPageState extends State<MaidFormPage> {
 
   File? _imageFile;
   String? _gender;
-  // String? _gate; // old single gate
   List<String> _selectedGates = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.maid != null) {
+      final m = widget.maid!;
+      _first.text = m['firstname'] ?? '';
+      _last.text = m['lastname'] ?? '';
+      _age.text = m['age']?.toString() ?? '';
+      _mobile.text = m['mobilenumber'] ?? '';
+      _gender = (m['gender'] ?? 'Female').toString().capitalize();
+      if (m['assignfloors'] is List) {
+        _selectedGates = List<String>.from(m['assignfloors']);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -33,29 +54,113 @@ class _MaidFormPageState extends State<MaidFormPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.camera);
-    if (picked != null) setState(() => _imageFile = File(picked.path));
+    final picked = await picker.pickImage(source: source);
+    if (picked != null) {
+      final originalBytes = await File(picked.path).readAsBytes();
+      final decoded = img.decodeImage(originalBytes);
+      if (decoded != null) {
+        final resized = img.copyResize(decoded, width: 600);
+        final compressedBytes = img.encodeJpg(resized, quality: 70);
+        final tempPath = '${picked.path}_compressed.jpg';
+        final compressedFile = await File(
+          tempPath,
+        ).writeAsBytes(compressedBytes);
+        setState(() => _imageFile = compressedFile);
+      } else {
+        setState(() => _imageFile = File(picked.path));
+      }
+    }
   }
 
-  void _onAdd() {
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Select Image Source'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF455A64)),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library,
+                color: Color(0xFF455A64),
+              ),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onAdd() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedGates.isEmpty) {
-      setState(() {}); // trigger error message
+      setState(() {}); // Trigger error message
       return;
     }
-    final maid = MaidModel(
-      firstName: _first.text.trim(),
-      lastName: _last.text.trim(),
-      age: int.parse(_age.text.trim()),
-      workingFlats: _selectedGates.join(','),
-      timings: _timings.text.trim(),
-      mobile: _mobile.text.trim().isEmpty ? null : _mobile.text.trim(),
-      imageUrl: _imageFile?.path,
-      gender: _gender ?? 'Female',
-    );
-    Navigator.pop(context, maid);
+
+    String? adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin session not found.')));
+      return;
+    }
+
+    Map<String, dynamic> result;
+
+    if (widget.maid != null && widget.maid!['id'] != null) {
+      final updateData = {
+        'id': widget.maid!['id'], // include id for backend duplicate check
+        'firstname': _first.text.trim(),
+        'lastname': _last.text.trim(),
+        'mobilenumber': _mobile.text.trim(),
+        'age': int.parse(_age.text.trim()),
+        'assignfloors': _selectedGates,
+        'gender': (_gender ?? 'Female').toLowerCase(),
+      };
+      result = await ApiService.updateHousekeepingStaff(
+        adminId: adminId,
+        staffId: widget.maid!['id'],
+        updateData: updateData,
+        imageFile: _imageFile,
+      );
+    } else {
+      result = await ApiService.createHousekeepingStaff(
+        adminId: adminId,
+        firstname: _first.text.trim(),
+        lastname: _last.text.trim(),
+        age: int.parse(_age.text.trim()),
+        assignfloors: _selectedGates,
+        mobilenumber: _mobile.text.trim(),
+        gender: (_gender ?? 'Female').toLowerCase(),
+        imageFile: _imageFile,
+      );
+    }
+
+    if (result['status'] == true && result['data'] != null) {
+      Navigator.pop(context, result['data']);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'] ?? 'Failed to save maid')),
+      );
+    }
   }
 
   Widget _buildGenderOption(String value, IconData icon) {
@@ -131,7 +236,7 @@ class _MaidFormPageState extends State<MaidFormPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Maid', style: TextStyle(color: Colors.white)),
+        title: const Text('Add Staff', style: TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFF455A64),
         elevation: 4,
         centerTitle: true,
@@ -143,7 +248,7 @@ class _MaidFormPageState extends State<MaidFormPage> {
           key: _formKey,
           child: Column(
             children: [
-              // Avatar with camera button
+              // Avatar with previous image support
               Center(
                 child: Stack(
                   children: [
@@ -152,8 +257,31 @@ class _MaidFormPageState extends State<MaidFormPage> {
                       backgroundColor: Colors.grey.shade300,
                       backgroundImage: _imageFile != null
                           ? FileImage(_imageFile!)
-                          : null,
-                      child: _imageFile == null
+                          : (widget.maid != null &&
+                                    widget.maid!['personimage'] != null &&
+                                    (widget.maid!['personimage'] as String)
+                                        .isNotEmpty
+                                ? ((widget.maid!['personimage'] as String)
+                                          .startsWith('data:image/')
+                                      ? MemoryImage(
+                                          base64Decode(
+                                            (widget.maid!['personimage']
+                                                    as String)
+                                                .split(',')
+                                                .last,
+                                          ),
+                                        )
+                                      : NetworkImage(
+                                              widget.maid!['personimage'],
+                                            )
+                                            as ImageProvider)
+                                : null),
+                      child:
+                          (_imageFile == null &&
+                              (widget.maid == null ||
+                                  widget.maid!['personimage'] == null ||
+                                  (widget.maid!['personimage'] as String)
+                                      .isEmpty))
                           ? const Icon(
                               Icons.person,
                               size: 55,
@@ -165,7 +293,7 @@ class _MaidFormPageState extends State<MaidFormPage> {
                       bottom: 0,
                       right: 0,
                       child: GestureDetector(
-                        onTap: _pickImage,
+                        onTap: _showImageSourceDialog,
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: const BoxDecoration(
@@ -246,14 +374,14 @@ class _MaidFormPageState extends State<MaidFormPage> {
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return null;
-                  if (!RegExp(r'^[0-9]{10}$').hasMatch(v)) {
+                  if (!RegExp(r'^[0-9]{10}$').hasMatch(v))
                     return 'Enter 10 digits';
-                  }
                   return null;
                 },
               ),
               const SizedBox(height: 14),
 
+              // Assigned Floors
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
@@ -288,7 +416,7 @@ class _MaidFormPageState extends State<MaidFormPage> {
                   ),
                 ),
 
-              // Gender Selection (Enhanced)
+              // Gender
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
@@ -318,11 +446,9 @@ class _MaidFormPageState extends State<MaidFormPage> {
                     style: TextStyle(color: Colors.red[700], fontSize: 12),
                   ),
                 ),
-
-              // Timings
               const SizedBox(height: 24),
 
-              // Add button
+              // Submit Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -334,9 +460,9 @@ class _MaidFormPageState extends State<MaidFormPage> {
                     ),
                   ),
                   onPressed: _onAdd,
-                  child: const Text(
-                    'Add Maid',
-                    style: TextStyle(fontSize: 18, color: Colors.white),
+                  child: Text(
+                    widget.maid != null ? 'Update Maid' : 'Add Maid',
+                    style: const TextStyle(fontSize: 18, color: Colors.white),
                   ),
                 ),
               ),
@@ -345,5 +471,13 @@ class _MaidFormPageState extends State<MaidFormPage> {
         ),
       ),
     );
+  }
+}
+
+// String capitalization extension
+extension StringCasingExtension on String {
+  String capitalize() {
+    if (isEmpty) return this;
+    return this[0].toUpperCase() + substring(1).toLowerCase();
   }
 }
