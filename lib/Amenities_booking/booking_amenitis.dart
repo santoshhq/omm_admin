@@ -2,20 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
 import 'package:omm_admin/config/api_config.dart';
 
 // ------------------- BOOKING SERVICE -------------------
 
 class BookingService {
-  // 📦 Fetch all bookings (Admin)
   static Future<List<Map<String, dynamic>>> fetchBookings() async {
     try {
-      print("🌐 Fetching from: ${ApiService.fetchBookings}");
       final response = await http.get(Uri.parse(ApiService.fetchBookings));
-      print("📦 Status: ${response.statusCode}");
-      print("📦 Body: ${response.body}");
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map && decoded.containsKey('data')) {
@@ -23,11 +17,9 @@ class BookingService {
         } else if (decoded is List) {
           return List<Map<String, dynamic>>.from(decoded);
         } else {
-          print("⚠️ Unexpected response format");
           return [];
         }
       } else {
-        print("❌ Failed to fetch bookings: ${response.statusCode}");
         return [];
       }
     } catch (e) {
@@ -36,44 +28,37 @@ class BookingService {
     }
   }
 
-  // ✅ Approve a booking
   static Future<bool> approveBooking(String bookingId) async {
     try {
       final url = ApiService.updateBookingStatus(bookingId);
-      print("🟢 Approving booking at: $url");
       final response = await http.put(
         Uri.parse(url),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"status": "accepted"}),
       );
-      print("📦 Approve response: ${response.statusCode}, ${response.body}");
       return response.statusCode == 200;
     } catch (e) {
-      print("BookingService.approveBooking error: $e");
       return false;
     }
   }
 
-  // ❌ Reject a booking
   static Future<bool> rejectBooking(String bookingId) async {
     try {
       final url = ApiService.updateBookingStatus(bookingId);
-      print("🔴 Rejecting booking at: $url");
       final response = await http.put(
         Uri.parse(url),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"status": "rejected"}),
       );
-      print("📦 Reject response: ${response.statusCode}, ${response.body}");
       return response.statusCode == 200;
     } catch (e) {
-      print("BookingService.rejectBooking error: $e");
       return false;
     }
   }
 }
 
 // ------------------- BOOKING AMENITIES PAGE -------------------
+
 class BookingAmenitiesPage extends StatefulWidget {
   const BookingAmenitiesPage({super.key});
 
@@ -109,8 +94,9 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
               DateTime.parse(booking['date']).day == _selectedDate!.day);
 
       final matchesStatus =
+          _filterStatus == 'all' ||
           (booking['status']?.toString().toLowerCase() ?? '') ==
-          _filterStatus.toLowerCase();
+              _filterStatus.toLowerCase();
 
       return matchesDate && matchesStatus;
     }).toList();
@@ -232,7 +218,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
             Padding(
               padding: const EdgeInsets.all(6),
               child: Text(
-                "📅 Showing bookings for: ${_selectedDate!.day}-${_selectedDate!.month}-${_selectedDate!.year}",
+                "📅 Showing bookings for: ${_selectedDate!.day.toString().padLeft(2, '0')}/${_selectedDate!.month.toString().padLeft(2, '0')}/${_selectedDate!.year}",
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
@@ -275,7 +261,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                       radius: 26,
                                       backgroundColor: Color(0xFF455A64),
                                       child: Icon(
-                                        Icons.event,
+                                        Icons.villa,
                                         color: Colors.white,
                                         size: 26,
                                       ),
@@ -407,6 +393,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
         spacing: 12,
         alignment: WrapAlignment.center,
         children: [
+          _statusChip("all", Colors.blueGrey),
           _statusChip("pending", Colors.orange),
           _statusChip("accepted", Colors.green),
           _statusChip("rejected", Colors.red),
