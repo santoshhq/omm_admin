@@ -1,6 +1,79 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-// ------------------- BookingAmenitiesPage -------------------
+import 'package:omm_admin/config/api_config.dart';
+
+// ------------------- BOOKING SERVICE -------------------
+
+class BookingService {
+  // 📦 Fetch all bookings (Admin)
+  static Future<List<Map<String, dynamic>>> fetchBookings() async {
+    try {
+      print("🌐 Fetching from: ${ApiService.fetchBookings}");
+      final response = await http.get(Uri.parse(ApiService.fetchBookings));
+      print("📦 Status: ${response.statusCode}");
+      print("📦 Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('data')) {
+          return List<Map<String, dynamic>>.from(decoded['data']);
+        } else if (decoded is List) {
+          return List<Map<String, dynamic>>.from(decoded);
+        } else {
+          print("⚠️ Unexpected response format");
+          return [];
+        }
+      } else {
+        print("❌ Failed to fetch bookings: ${response.statusCode}");
+        return [];
+      }
+    } catch (e) {
+      print("BookingService.fetchBookings error: $e");
+      return [];
+    }
+  }
+
+  // ✅ Approve a booking
+  static Future<bool> approveBooking(String bookingId) async {
+    try {
+      final url = ApiService.updateBookingStatus(bookingId);
+      print("🟢 Approving booking at: $url");
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"status": "accepted"}),
+      );
+      print("📦 Approve response: ${response.statusCode}, ${response.body}");
+      return response.statusCode == 200;
+    } catch (e) {
+      print("BookingService.approveBooking error: $e");
+      return false;
+    }
+  }
+
+  // ❌ Reject a booking
+  static Future<bool> rejectBooking(String bookingId) async {
+    try {
+      final url = ApiService.updateBookingStatus(bookingId);
+      print("🔴 Rejecting booking at: $url");
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"status": "rejected"}),
+      );
+      print("📦 Reject response: ${response.statusCode}, ${response.body}");
+      return response.statusCode == 200;
+    } catch (e) {
+      print("BookingService.rejectBooking error: $e");
+      return false;
+    }
+  }
+}
+
+// ------------------- BOOKING AMENITIES PAGE -------------------
 class BookingAmenitiesPage extends StatefulWidget {
   const BookingAmenitiesPage({super.key});
 
@@ -9,21 +82,36 @@ class BookingAmenitiesPage extends StatefulWidget {
 }
 
 class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
-  // Dummy booking data with "date" and "status"
   final List<Map<String, dynamic>> _bookings = [];
-
   DateTime? _selectedDate;
-  String _filterStatus = "Pending"; // Default filter
+  String _filterStatus = "pending"; // lowercase to match backend
 
-  // Function to filter bookings
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  void _loadBookings() async {
+    final bookings = await BookingService.fetchBookings();
+    setState(() {
+      _bookings.clear();
+      _bookings.addAll(bookings);
+    });
+  }
+
   List<Map<String, dynamic>> get _filteredBookings {
     return _bookings.where((booking) {
       final matchesDate =
           _selectedDate == null ||
-          (booking['date'].year == _selectedDate!.year &&
-              booking['date'].month == _selectedDate!.month &&
-              booking['date'].day == _selectedDate!.day);
-      final matchesStatus = booking['status'] == _filterStatus;
+          (DateTime.parse(booking['date']).year == _selectedDate!.year &&
+              DateTime.parse(booking['date']).month == _selectedDate!.month &&
+              DateTime.parse(booking['date']).day == _selectedDate!.day);
+
+      final matchesStatus =
+          (booking['status']?.toString().toLowerCase() ?? '') ==
+          _filterStatus.toLowerCase();
+
       return matchesDate && matchesStatus;
     }).toList();
   }
@@ -37,9 +125,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
     );
 
     if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
     }
   }
 
@@ -49,17 +135,83 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
     });
   }
 
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'accepted':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  /// 🔹 Dialog for Accept/Reject
+  void _showBookingDialog(Map<String, dynamic> booking) {
+    final member = booking['userId'] ?? {};
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          "Booking Action",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "Do you want to Accept or Reject the booking for ${member['firstName'] ?? ''}?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () async {
+              Navigator.pop(context);
+              final success = await BookingService.approveBooking(
+                booking['_id'],
+              );
+              if (success) {
+                _updateBookingStatus(booking, "accepted");
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("✅ Booking accepted!")),
+                );
+              }
+            },
+            child: const Text("Accept", style: TextStyle(color: Colors.white)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final success = await BookingService.rejectBooking(
+                booking['_id'],
+              );
+              if (success) {
+                _updateBookingStatus(booking, "rejected");
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("❌ Booking rejected!")),
+                );
+              }
+            },
+            child: const Text("Reject", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          "Bookings Amenities",
+          "Amenity Bookings",
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: const Color(0xFF455A64),
         iconTheme: const IconThemeData(color: Colors.white),
-
         centerTitle: true,
         elevation: 4,
         actions: [
@@ -75,47 +227,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
       ),
       body: Column(
         children: [
-          // Pending / Approved / Rejected Tabs
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Wrap(
-              spacing: 12,
-              alignment: WrapAlignment.center,
-              children: [
-                ChoiceChip(
-                  label: const Text(
-                    "Pending",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  selected: _filterStatus == "Pending",
-                  selectedColor: Colors.orange,
-                  backgroundColor: Colors.orange.withOpacity(0.6),
-                  onSelected: (_) => setState(() => _filterStatus = "Pending"),
-                ),
-                ChoiceChip(
-                  label: const Text(
-                    "Approved",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  selected: _filterStatus == "Approved",
-                  selectedColor: Colors.green,
-                  backgroundColor: Colors.green.withOpacity(0.6),
-                  onSelected: (_) => setState(() => _filterStatus = "Approved"),
-                ),
-                ChoiceChip(
-                  label: const Text(
-                    "Rejected",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  selected: _filterStatus == "Rejected",
-                  selectedColor: Colors.red,
-                  backgroundColor: Colors.red.withOpacity(0.6),
-                  onSelected: (_) => setState(() => _filterStatus = "Rejected"),
-                ),
-              ],
-            ),
-          ),
+          _buildStatusFilter(),
           if (_selectedDate != null)
             Padding(
               padding: const EdgeInsets.all(6),
@@ -140,22 +252,15 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                     itemCount: _filteredBookings.length,
                     itemBuilder: (context, index) {
                       final booking = _filteredBookings[index];
+                      final member = booking['userId'] ?? {};
+                      final amenity = booking['amenityId'] ?? {};
+
                       return InkWell(
                         borderRadius: BorderRadius.circular(16),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BookingDetailPage(
-                                booking: booking,
-                                onStatusChange: _updateBookingStatus,
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => _showBookingDialog(booking),
                         child: Card(
-                          elevation: 6,
-                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 5,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -182,7 +287,8 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            booking["amenity"],
+                                            amenity['name'] ??
+                                                'Unknown Amenity',
                                             style: const TextStyle(
                                               fontSize: 18,
                                               fontWeight: FontWeight.bold,
@@ -197,7 +303,9 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                                 color: Colors.grey,
                                               ),
                                               const SizedBox(width: 4),
-                                              Text(booking['name']),
+                                              Text(
+                                                "${member['firstName'] ?? ''} ${member['lastName'] ?? ''}",
+                                              ),
                                             ],
                                           ),
                                           Row(
@@ -209,7 +317,7 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                "${booking['flatNo']} • Floor ${booking['floorNo']}",
+                                                "${member['flatNo'] ?? ''} • Floor ${member['floor'] ?? ''}",
                                               ),
                                             ],
                                           ),
@@ -222,15 +330,11 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: booking['status'] == "Pending"
-                                            ? Colors.orange
-                                            : booking['status'] == "Approved"
-                                            ? Colors.green
-                                            : Colors.red,
+                                        color: _statusColor(booking['status']),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
-                                        booking['status'],
+                                        booking['status'] ?? 'Unknown',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -243,73 +347,42 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
                                 Row(
                                   children: [
                                     const Icon(
-                                      Icons.phone,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(booking['contact']),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.group,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text("People: ${booking['people']}"),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.celebration,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text("Event: ${booking['event']}"),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    const Icon(
                                       Icons.access_time,
                                       size: 16,
                                       color: Colors.grey,
                                     ),
                                     const SizedBox(width: 4),
-                                    Text(booking['time']),
+                                    Text(
+                                      "${booking['startTime']} - ${booking['endTime']}",
+                                    ),
                                   ],
                                 ),
-                                const Divider(),
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.payment,
-                                          color: Colors.green,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          "₹${booking['payment'].toStringAsFixed(2)}",
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                     const Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 18,
-                                      color: Color(0xFF455A64),
+                                      Icons.attach_money,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text("cash:₹${booking['amount']}"),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      (() {
+                                        final date = DateTime.parse(
+                                          booking['date'],
+                                        ).toLocal();
+                                        return "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}";
+                                      })(),
                                     ),
                                   ],
                                 ),
@@ -325,9 +398,41 @@ class _BookingAmenitiesPageState extends State<BookingAmenitiesPage> {
       ),
     );
   }
+
+  Widget _buildStatusFilter() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Wrap(
+        spacing: 12,
+        alignment: WrapAlignment.center,
+        children: [
+          _statusChip("pending", Colors.orange),
+          _statusChip("accepted", Colors.green),
+          _statusChip("rejected", Colors.red),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(String status, Color color) {
+    return ChoiceChip(
+      label: Text(
+        status.capitalize(),
+        style: const TextStyle(color: Colors.white),
+      ),
+      selected: _filterStatus == status,
+      selectedColor: color,
+      backgroundColor: color.withOpacity(0.6),
+      onSelected: (_) => setState(() => _filterStatus = status),
+    );
+  }
 }
 
-// ------------------- BookingDetailPage -------------------
+// Small string helper
+
+/// ------------------- BOOKING DETAIL PAGE -------------------
+
 class BookingDetailPage extends StatefulWidget {
   final Map<String, dynamic> booking;
   final Function(Map<String, dynamic>, String) onStatusChange;
@@ -358,34 +463,110 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     super.dispose();
   }
 
-  void _approveBooking(BuildContext context) {
-    widget.onStatusChange(widget.booking, "Approved");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("✅ Booking approved for ${widget.booking['name']}"),
-      ),
-    );
-    Navigator.pop(context);
+  /// 🔒 Confirmation dialog before approving/rejecting
+  Future<bool> _confirmAction(BuildContext context, String action) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  action == "approve" ? Icons.check_circle : Icons.cancel,
+                  color: action == "approve" ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 8),
+                Text('Confirm ${action.capitalize()}'),
+              ],
+            ),
+            content: Text(
+              'Are you sure you want to ${action.toLowerCase()} this booking?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: action == "approve"
+                      ? Colors.green
+                      : Colors.red,
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  action.capitalize(),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
-  void _rejectBooking(BuildContext context) {
-    widget.onStatusChange(widget.booking, "Rejected");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("❌ Booking rejected for ${widget.booking['name']}"),
-      ),
-    );
-    Navigator.pop(context);
+  /// ✅ Approve booking
+  Future<void> _approveBooking(BuildContext context) async {
+    final confirmed = await _confirmAction(context, "approve");
+    if (!confirmed) return;
+
+    final bookingId = widget.booking['_id'];
+    final success = await BookingService.approveBooking(bookingId);
+
+    if (success) {
+      widget.onStatusChange(widget.booking, "accepted");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "✅ Booking approved for ${widget.booking['userId']['firstName'] ?? ''}",
+          ),
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ Failed to approve booking")),
+      );
+    }
+  }
+
+  /// ❌ Reject booking
+  Future<void> _rejectBooking(BuildContext context) async {
+    final confirmed = await _confirmAction(context, "reject");
+    if (!confirmed) return;
+
+    final bookingId = widget.booking['_id'];
+    final success = await BookingService.rejectBooking(bookingId);
+
+    if (success) {
+      widget.onStatusChange(widget.booking, "rejected");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "❌ Booking rejected for ${widget.booking['userId']['firstName'] ?? ''}",
+          ),
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ Failed to reject booking")),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final booking = widget.booking;
+    final amenity = booking['amenityId'] ?? {};
+    final member = booking['userId'] ?? {};
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          booking["amenity"],
+          amenity['name'] ?? 'Booking Details',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -398,8 +579,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
-          labelColor: Colors.white, // Active tab text/icon color
-          unselectedLabelColor: Colors.white70, // Inactive tab color
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(
               icon: Icon(Icons.check, color: Colors.white),
@@ -415,8 +596,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildDetails(context, booking, true),
-          _buildDetails(context, booking, false),
+          _buildDetails(context, booking, member, amenity, true),
+          _buildDetails(context, booking, member, amenity, false),
         ],
       ),
     );
@@ -425,6 +606,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   Widget _buildDetails(
     BuildContext context,
     Map<String, dynamic> booking,
+    Map<String, dynamic> member,
+    Map<String, dynamic> amenity,
     bool isApprove,
   ) {
     return SingleChildScrollView(
@@ -432,14 +615,30 @@ class _BookingDetailPageState extends State<BookingDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _detailRow(Icons.business, "Amenity", booking['amenity']),
-          _detailRow(Icons.person, "Name", booking['name']),
-          _detailRow(Icons.apartment, "Flat No", booking['flatNo']),
-          _detailRow(Icons.layers, "Floor No", booking['floorNo']),
-          _detailRow(Icons.phone, "Contact", booking['contact']),
-          _detailRow(Icons.group, "People", booking['people'].toString()),
-          _detailRow(Icons.celebration, "Event", booking['event']),
-          _detailRow(Icons.access_time, "Time", booking['time']),
+          _detailRow(Icons.business, "Amenity", amenity['name'] ?? 'N/A'),
+          _detailRow(
+            Icons.person,
+            "Name",
+            "${member['firstName'] ?? ''} ${member['lastName'] ?? ''}",
+          ),
+          _detailRow(Icons.apartment, "Flat No", member['flatNo'] ?? 'N/A'),
+          _detailRow(Icons.layers, "Floor No", member['floor'] ?? 'N/A'),
+          _detailRow(Icons.phone, "Contact", member['mobile'] ?? 'N/A'),
+          _detailRow(
+            Icons.access_time,
+            "Time",
+            "${booking['startTime'] ?? ''} - ${booking['endTime'] ?? ''}",
+          ),
+          _detailRow(
+            Icons.calendar_today,
+            "Date",
+            DateTime.parse(booking['date']).toLocal().toString().split(' ')[0],
+          ),
+          _detailRow(
+            Icons.attach_money,
+            "Amount",
+            "₹${booking['amount']?.toString() ?? '0'}",
+          ),
           const SizedBox(height: 30),
           Center(
             child: ElevatedButton.icon(
@@ -464,10 +663,9 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white, // 👈 make text white
+                  color: Colors.white,
                 ),
               ),
-
               onPressed: () => isApprove
                   ? _approveBooking(context)
                   : _rejectBooking(context),
@@ -500,3 +698,11 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     );
   }
 }
+
+// 🧩 Helper extension
+extension StringCasingExtension on String {
+  String capitalize() =>
+      isNotEmpty ? '${this[0].toUpperCase()}${substring(1)}' : this;
+}
+
+// Keep this one at the bottom:

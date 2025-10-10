@@ -3290,4 +3290,81 @@ class ApiService {
       return {'status': false, 'message': e.toString()};
     }
   }
+
+  // ------------------ Amenities Bookings ------------------
+  static String get bookingBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/bookings";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/bookings";
+    } else {
+      return "http://localhost:8080/api/bookings";
+    }
+  }
+
+  // 📦 Fetch all bookings (Admin)
+  static String get fetchBookings => "$bookingBaseUrl/all";
+
+  // ✅ Update booking status (Approve/Reject)
+  static String updateBookingStatus(String bookingId) =>
+      "$bookingBaseUrl/booking/$bookingId/status";
+
+  // 🧭 Create new booking (User)
+  static String get createBooking => "$bookingBaseUrl/create";
+
+  // 👤 Fetch bookings of a specific user
+  static String userBookings(String userId) => "$bookingBaseUrl/user/$userId";
+
+  // 🧾 Helper methods for direct API use
+  static Future<List<Map<String, dynamic>>> getAllAmenityBookings() async {
+    try {
+      final response = await http.get(Uri.parse(fetchBookings));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map && data.containsKey('data')) {
+          return List<Map<String, dynamic>>.from(data['data']);
+        } else if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        } else {
+          return [];
+        }
+      } else {
+        print("❌ getAllAmenityBookings failed: ${response.statusCode}");
+        return [];
+      }
+    } catch (e) {
+      print("❌ Exception in getAllAmenityBookings: $e");
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> approveAmenityBooking(
+    String bookingId,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse(updateBookingStatus(bookingId)),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"status": "accepted"}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> rejectAmenityBooking(
+    String bookingId,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse(updateBookingStatus(bookingId)),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"status": "rejected"}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'message': e.toString()};
+    }
+  }
 }
