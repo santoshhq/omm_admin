@@ -5,6 +5,7 @@ class BillRequest {
   final String transactionId;
   final String paymentApp;
   final String paymentAppName;
+  final double? amount; // Payment amount
   String status; // 'Pending', 'Accepted', 'Rejected'
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -16,6 +17,7 @@ class BillRequest {
     required this.transactionId,
     required this.paymentApp,
     required this.paymentAppName,
+    this.amount,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -31,6 +33,9 @@ class BillRequest {
       transactionId: json['transactionId'] ?? '',
       paymentApp: json['paymentapp'] ?? '',
       paymentAppName: json['PaymentAppName'] ?? '',
+      amount: json['billId'] is Map
+          ? (json['billId']['billamount'] as num?)?.toDouble()
+          : null,
       status: json['status'] ?? 'Pending',
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
@@ -45,6 +50,9 @@ class UserProfile {
   final String email;
   final String phone;
   final String address;
+  final String flatNo;
+  final String floorNo;
+  final String mobile;
 
   UserProfile({
     required this.id,
@@ -53,6 +61,9 @@ class UserProfile {
     required this.email,
     required this.phone,
     required this.address,
+    required this.flatNo,
+    required this.floorNo,
+    required this.mobile,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -63,6 +74,9 @@ class UserProfile {
       email: json['email'] ?? '',
       phone: json['phone'] ?? '',
       address: json['address'] ?? '',
+      flatNo: json['flatNo'] ?? '',
+      floorNo: json['floor'] ?? '', // Note: backend uses 'floor'
+      mobile: json['mobile'] ?? '',
     );
   }
 }

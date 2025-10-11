@@ -3379,6 +3379,17 @@ class ApiService {
     }
   }
 
+  // Base URL for bill requests
+  static String get billRequestsBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/bill-requests";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/bill-requests";
+    } else {
+      return "http://localhost:8080/api/bill-requests";
+    }
+  }
+
   // -------------------- Bills Management APIs --------------------
   /// Create a new bill
   static String get createBill => '$billsBaseUrl/create';
@@ -3397,5 +3408,9 @@ class ApiService {
 
   /// Get bill requests by bill ID
   static String getBillRequests(String billId) =>
-      '$billsBaseUrl/requests/$billId';
+      '$billRequestsBaseUrl/bills/$billId';
+
+  /// Update bill request by ID
+  static String updateBillRequest(String requestId) =>
+      '$billRequestsBaseUrl/$requestId';
 }

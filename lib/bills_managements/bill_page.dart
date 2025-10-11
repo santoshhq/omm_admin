@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:omm_admin/bills_managements/bills_modules.dart';
 import 'package:omm_admin/bills_managements/bll_card.dart';
 import 'package:omm_admin/bills_managements/bill_add_page.dart';
+import 'package:omm_admin/bills_managements/bill_request_model.dart';
 import 'package:omm_admin/config/api_config.dart';
 import 'package:omm_admin/services/admin_session_service.dart';
 
@@ -16,6 +17,7 @@ class BillManagementPage extends StatefulWidget {
 
 class _BillManagementPageState extends State<BillManagementPage> {
   final List<Bill> bills = [];
+  double totalCollectedAmount = 0.0;
 
   @override
   void initState() {
@@ -51,6 +53,8 @@ class _BillManagementPageState extends State<BillManagementPage> {
             bills.clear();
             bills.addAll(fetchedBills);
           });
+          // Calculate total collected amount after fetching bills
+          _calculateTotalCollectedAmount();
         } else {
           print('Backend error: ${responseJson['message']}');
         }
@@ -60,6 +64,41 @@ class _BillManagementPageState extends State<BillManagementPage> {
     } catch (e) {
       print('Error in _fetchBills: $e');
     }
+  }
+
+  Future<void> _calculateTotalCollectedAmount() async {
+    double total = 0.0;
+
+    for (final bill in bills) {
+      try {
+        final url = Uri.parse(ApiService.getBillRequests(bill.id));
+        final res = await http.get(url);
+
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['status'] == true) {
+            final requestsData = data['data'] as List;
+            final requests = requestsData
+                .map((json) => BillRequest.fromJson(json))
+                .toList();
+
+            // Sum amounts from accepted requests
+            for (final request in requests) {
+              if (request.status.toLowerCase() == 'accepted' &&
+                  request.amount != null) {
+                total += request.amount!;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Error fetching requests for bill ${bill.id}: $e');
+      }
+    }
+
+    setState(() {
+      totalCollectedAmount = total;
+    });
   }
 
   void _addBill(Bill bill) async {
@@ -99,6 +138,8 @@ class _BillManagementPageState extends State<BillManagementPage> {
         setState(() {
           bills.add(responseData);
         });
+        // Recalculate total collected amount after adding new bill
+        _calculateTotalCollectedAmount();
       } else {
         print(
           'Failed to create bill - Status: ${res.statusCode}, Body: ${res.body}',
@@ -262,6 +303,27 @@ class _BillManagementPageState extends State<BillManagementPage> {
                               size: iconSize,
                               color: Colors.green,
                             ),
+                          ),
+                          SizedBox(width: spacing),
+                          Text(
+                            '₹${totalCollectedAmount.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: fontSizeTitle * 1.2,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                          SizedBox(width: spacing * 0.5),
+                          IconButton(
+                            onPressed: _calculateTotalCollectedAmount,
+                            icon: Icon(
+                              Icons.refresh,
+                              size: iconSize * 0.8,
+                              color: Colors.blue.shade600,
+                            ),
+                            tooltip: 'Refresh total amount',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
                         ],
                       ),
