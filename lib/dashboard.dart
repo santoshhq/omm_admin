@@ -310,7 +310,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           subtitle: "12 pending bills",
                           color: Colors.orange.shade100,
                           iconColor: Colors.orange,
-                          page: BillsPage(),
+                          page: BillManagementPage(),
                         ),
 
                         _buildManageCard(

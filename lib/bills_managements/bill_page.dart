@@ -1,47 +1,130 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:omm_admin/bills_managements/bills_modules.dart';
 import 'package:omm_admin/bills_managements/bll_card.dart';
-// import 'dart:math' as math; // unused
+import 'package:omm_admin/bills_managements/bill_add_page.dart';
+import 'package:omm_admin/config/api_config.dart';
+import 'package:omm_admin/services/admin_session_service.dart';
 
-class BillsPage extends StatefulWidget {
-  const BillsPage({super.key});
+class BillManagementPage extends StatefulWidget {
+  const BillManagementPage({super.key});
 
   @override
-  State<BillsPage> createState() => _BillsPageState();
+  State<BillManagementPage> createState() => _BillManagementPageState();
 }
 
-class _BillsPageState extends State<BillsPage> {
-  List<Bill> bills = [
-    Bill(
-      id: '1',
-      title: 'Elevator Bill',
-      category: 'Maintenance',
-      amount: 2500,
-      dueDate: DateTime.now().add(const Duration(days: 7)),
-    ),
-    Bill(
-      id: '2',
-      title: 'Security Salaries',
-      category: 'Security Services',
-      amount: 15000,
-      dueDate: DateTime.now().add(const Duration(days: 15)),
-    ),
-  ];
+class _BillManagementPageState extends State<BillManagementPage> {
+  final List<Bill> bills = [];
 
-  void _addBill(Bill bill) {
-    setState(() {
-      bills.add(bill);
-    });
+  @override
+  void initState() {
+    super.initState();
+    _fetchBills();
   }
 
-  double getTotalAmount() {
-    return bills.fold(0, (sum, item) => sum + item.amount);
+  Future<void> _fetchBills() async {
+    print('_fetchBills called');
+    final adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      print('Admin ID null in _fetchBills');
+      return;
+    }
+    print('Admin ID: $adminId');
+
+    try {
+      final url = Uri.parse(ApiService.getBillsByAdmin(adminId));
+      print('Fetch URL: $url');
+      final res = await http.get(url);
+      print('Fetch response status: ${res.statusCode}');
+      print('Fetch response body: ${res.body}');
+
+      if (res.statusCode == 200) {
+        final responseJson = jsonDecode(res.body);
+        if (responseJson['status'] == true) {
+          final billsData = responseJson['data'] as List;
+          final fetchedBills = billsData
+              .map((json) => Bill.fromJson(json))
+              .toList();
+          print('Fetched ${fetchedBills.length} bills for admin');
+          setState(() {
+            bills.clear();
+            bills.addAll(fetchedBills);
+          });
+        } else {
+          print('Backend error: ${responseJson['message']}');
+        }
+      } else {
+        print('Failed to fetch bills: ${res.statusCode}');
+      }
+    } catch (e) {
+      print('Error in _fetchBills: $e');
+    }
+  }
+
+  void _addBill(Bill bill) async {
+    print('_addBill called with bill: ${bill.toJson()}');
+    // Fetch admin ID from session
+    final adminId = await AdminSessionService.getAdminId();
+    if (adminId == null) {
+      print('Admin ID null in _addBill');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin not logged in')));
+      return;
+    }
+    print('Admin ID in _addBill: $adminId');
+
+    try {
+      final url = Uri.parse(ApiService.createBill);
+      print('API URL: $url');
+      final billData = bill.toJson();
+      billData['createdByAdminId'] = adminId;
+      print('Bill data to send: $billData');
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(billData),
+      );
+      print('Response status: ${res.statusCode}');
+      print('Response body: ${res.body}');
+
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        final responseJson = jsonDecode(res.body);
+        final billJson =
+            responseJson['data'] ??
+            responseJson; // Handle both {data: bill} and direct bill
+        final responseData = Bill.fromJson(billJson);
+        print('Bill created successfully, adding to list');
+        setState(() {
+          bills.add(responseData);
+        });
+      } else {
+        print(
+          'Failed to create bill - Status: ${res.statusCode}, Body: ${res.body}',
+        );
+        try {
+          final errorData = jsonDecode(res.body);
+          print(
+            'Backend error details: Status=${errorData['status']}, Message=${errorData['message']}, Error=${errorData['error']}',
+          );
+        } catch (e) {
+          print('Could not parse error response: $e');
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create bill: ${res.body}')),
+        );
+      }
+    } catch (e) {
+      print('Error in _addBill: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // final currentMonth = "${DateTime.now().month}-${DateTime.now().year}";
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bill Management'),
@@ -52,17 +135,12 @@ class _BillsPageState extends State<BillsPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // 🔹 Total Amount Collected Container
+            // Total Amount Collected Container
             LayoutBuilder(
               builder: (context, constraints) {
-                // Use constraints to adjust sizes dynamically
-                double iconSize =
-                    constraints.maxWidth * 0.06; // adaptive icon size
-                double fontSizeTitle =
-                    constraints.maxWidth * 0.045; // title font
-                double fontSizeAmount =
-                    constraints.maxWidth * 0.07; // amount font
-                double spacing = constraints.maxWidth * 0.02; // dynamic spacing
+                double iconSize = constraints.maxWidth * 0.06;
+                double fontSizeTitle = constraints.maxWidth * 0.045;
+                double spacing = constraints.maxWidth * 0.02;
 
                 return Container(
                   width: double.infinity,
@@ -89,7 +167,7 @@ class _BillsPageState extends State<BillsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 🔹 Header Row: Title + Month Button
+                      // Header Row: Title + Month Button
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -111,7 +189,7 @@ class _BillsPageState extends State<BillsPage> {
                               ),
                             ],
                           ),
-                          // 🔹 Month Button
+                          // Month Button
                           TextButton(
                             style: TextButton.styleFrom(
                               backgroundColor: const Color.fromARGB(
@@ -127,10 +205,7 @@ class _BillsPageState extends State<BillsPage> {
                                 horizontal: spacing * 2,
                                 vertical: spacing * 0.8,
                               ),
-                              minimumSize: const Size(
-                                0,
-                                0,
-                              ), // remove default min size
+                              minimumSize: const Size(0, 0),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             onPressed: () {
@@ -152,7 +227,6 @@ class _BillsPageState extends State<BillsPage> {
                                       itemBuilder: (context, index) => ListTile(
                                         title: Text(previousMonths[index]),
                                         onTap: () {
-                                          // Handle month selection
                                           Navigator.pop(context);
                                         },
                                       ),
@@ -173,7 +247,7 @@ class _BillsPageState extends State<BillsPage> {
                         ],
                       ),
                       SizedBox(height: spacing * 1.5),
-                      // 🔹 Amount Row with Rupee Icon
+                      // Amount Row with Rupee Icon
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -189,19 +263,10 @@ class _BillsPageState extends State<BillsPage> {
                               color: Colors.green,
                             ),
                           ),
-                          SizedBox(width: spacing),
-                          Text(
-                            getTotalAmount().toStringAsFixed(2),
-                            style: TextStyle(
-                              fontSize: fontSizeAmount,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
                         ],
                       ),
                       SizedBox(height: spacing * 1.5),
-                      // 🔹 Additional Info Row: Total / Pending Bills
+                      // Additional Info Row
                       Row(
                         children: [
                           Icon(
@@ -240,19 +305,14 @@ class _BillsPageState extends State<BillsPage> {
                 );
               },
             ),
-
             const SizedBox(height: 16),
-
-            // 🔹 Bill Cards List
+            // Bill Cards List
             Flexible(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                ), // reduce padding to increase width
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Section Title with Icon
                     Row(
                       children: const [
                         Icon(
@@ -271,11 +331,9 @@ class _BillsPageState extends State<BillsPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-
-                    // List of Bills
                     Expanded(
                       child: SizedBox(
-                        width: double.infinity, // take full horizontal space
+                        width: double.infinity,
                         child: bills.isEmpty
                             ? const Center(
                                 child: Text(
@@ -286,19 +344,24 @@ class _BillsPageState extends State<BillsPage> {
                                   ),
                                 ),
                               )
-                            : ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: bills.length,
-                                itemBuilder: (context, index) => BillCard(
-                                  bill: bills[index],
-                                  onDelete: (deletedId) {
-                                    if (deletedId == null) return;
-                                    setState(() {
-                                      bills.removeWhere(
-                                        (b) => b.id == deletedId,
-                                      );
-                                    });
-                                  },
+                            : RefreshIndicator(
+                                onRefresh: () async {
+                                  await _fetchBills();
+                                },
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: bills.length,
+                                  itemBuilder: (context, index) => BillCard(
+                                    bill: bills[index],
+                                    onDelete: (deletedId) {
+                                      if (deletedId == null) return;
+                                      setState(() {
+                                        bills.removeWhere(
+                                          (b) => b.id == deletedId,
+                                        );
+                                      });
+                                    },
+                                  ),
                                 ),
                               ),
                       ),
@@ -314,9 +377,9 @@ class _BillsPageState extends State<BillsPage> {
         backgroundColor: Colors.green,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () async {
-          final newBill = await showDialog<Bill>(
-            context: context,
-            builder: (context) => const BillForm(),
+          final newBill = await Navigator.push<Bill>(
+            context,
+            MaterialPageRoute(builder: (_) => const AddBillPage()),
           );
           if (newBill != null) _addBill(newBill);
         },
