@@ -413,109 +413,112 @@ class FestivalContentState extends State<FestivalContent> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: SlidableAutoCloseBehavior(
-                      child: ListView.builder(
-                        itemCount: festivals.length,
-                        itemBuilder: (context, index) {
-                          try {
-                            final fest = festivals[index];
+                    child: RefreshIndicator(
+                      onRefresh: _loadEvents,
+                      child: SlidableAutoCloseBehavior(
+                        child: ListView.builder(
+                          itemCount: festivals.length,
+                          itemBuilder: (context, index) {
+                            try {
+                              final fest = festivals[index];
 
-                            final double progress = (fest.targetAmount != 0)
-                                ? (fest.collectedAmount / fest.targetAmount)
-                                      .clamp(0.0, 1.0)
-                                : 0.0;
+                              final double progress = (fest.targetAmount != 0)
+                                  ? (fest.collectedAmount / fest.targetAmount)
+                                        .clamp(0.0, 1.0)
+                                  : 0.0;
 
-                            return Slidable(
-                              key: ValueKey('${fest.name}_$index'),
-                              groupTag:
-                                  'festival_group', // Ensures only one slidable is open at a time
-                              closeOnScroll: true,
-                              startActionPane: null, // Disable left swipe
-                              endActionPane: ActionPane(
-                                motion: const DrawerMotion(),
-                                extentRatio:
-                                    0.4, // controls how much space the actions take
-                                children: [
-                                  SlidableAction(
-                                    onPressed: (ctx) => _editEvent(index),
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
-                                    icon: Icons.edit,
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      bottomLeft: Radius.circular(16),
-                                    ),
-                                  ),
-                                  SlidableAction(
-                                    onPressed: (ctx) => _deleteEvent(index),
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    icon: Icons.delete,
-                                    borderRadius: const BorderRadius.only(
-                                      topRight: Radius.circular(16),
-                                      bottomRight: Radius.circular(16),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              child: _buildEventImage(
-                                fest,
-                                progress,
-                                index,
-                                context,
-                              ),
-                            );
-                          } catch (e, stackTrace) {
-                            print(
-                              '❌ Error building event card at index $index: $e',
-                            );
-                            print('Stack trace: $stackTrace');
-
-                            // Return a safe error card instead of crashing
-                            return Card(
-                              margin: const EdgeInsets.symmetric(
-                                vertical: 4,
-                                horizontal: 4,
-                              ),
-                              child: Container(
-                                height: 120,
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.red.shade200,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                              return Slidable(
+                                key: ValueKey('${fest.name}_$index'),
+                                groupTag:
+                                    'festival_group', // Ensures only one slidable is open at a time
+                                closeOnScroll: true,
+                                startActionPane: null, // Disable left swipe
+                                endActionPane: ActionPane(
+                                  motion: const DrawerMotion(),
+                                  extentRatio:
+                                      0.4, // controls how much space the actions take
                                   children: [
-                                    Icon(
-                                      Icons.error_outline,
-                                      color: Colors.red.shade600,
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Error loading event',
-                                      style: TextStyle(
-                                        color: Colors.red.shade700,
-                                        fontWeight: FontWeight.bold,
+                                    SlidableAction(
+                                      onPressed: (ctx) => _editEvent(index),
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      icon: Icons.edit,
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(16),
+                                        bottomLeft: Radius.circular(16),
                                       ),
                                     ),
-                                    Text(
-                                      'Index: $index',
-                                      style: TextStyle(
-                                        color: Colors.red.shade600,
-                                        fontSize: 12,
+                                    SlidableAction(
+                                      onPressed: (ctx) => _deleteEvent(index),
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                      icon: Icons.delete,
+                                      borderRadius: const BorderRadius.only(
+                                        topRight: Radius.circular(16),
+                                        bottomRight: Radius.circular(16),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            );
-                          }
-                        },
+                                child: _buildEventImage(
+                                  fest,
+                                  progress,
+                                  index,
+                                  context,
+                                ),
+                              );
+                            } catch (e, stackTrace) {
+                              print(
+                                '❌ Error building event card at index $index: $e',
+                              );
+                              print('Stack trace: $stackTrace');
+
+                              // Return a safe error card instead of crashing
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                  horizontal: 4,
+                                ),
+                                child: Container(
+                                  height: 120,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.red.shade200,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        color: Colors.red.shade600,
+                                        size: 32,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Error loading event',
+                                        style: TextStyle(
+                                          color: Colors.red.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Index: $index',
+                                        style: TextStyle(
+                                          color: Colors.red.shade600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -594,13 +597,16 @@ class FestivalContentState extends State<FestivalContent> {
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ViewDonationsPage(festival: fest),
             ),
           );
+          // Refresh the events list when returning from ViewDonationsPage
+          // This ensures progress bars update if donations were modified
+          await _loadEvents();
         },
         child: Container(
           decoration: BoxDecoration(
