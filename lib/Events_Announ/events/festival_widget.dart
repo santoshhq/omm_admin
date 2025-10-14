@@ -337,7 +337,7 @@ class FestivalContentState extends State<FestivalContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading event details: ${e.toString()}'),
+            content: Text('Error Ng event details: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );

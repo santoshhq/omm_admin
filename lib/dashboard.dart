@@ -307,7 +307,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           context,
                           icon: Icons.receipt_long,
                           title: "Manage Bills",
-                          subtitle: "12 pending bills",
+                          subtitle: "Tap to view",
                           color: Colors.orange.shade100,
                           iconColor: Colors.orange,
                           page: BillManagementPage(),

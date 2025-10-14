@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omm_admin/authentications/login_page/login_page_widget.dart';
@@ -70,6 +73,25 @@ class _AdminPageWidgetState extends State<AdminPageWidget> {
           ),
         );
       }
+    }
+  }
+
+  ImageProvider? _getImageProvider() {
+    if (adminInfoModel.imagePath.isEmpty) return null;
+
+    if (adminInfoModel.imagePath.startsWith('data:image/')) {
+      // Handle base64 images
+      try {
+        final String base64String = adminInfoModel.imagePath.split(',')[1];
+        final Uint8List bytes = base64Decode(base64String);
+        return MemoryImage(bytes);
+      } catch (e) {
+        debugPrint("❌ Error decoding base64 image: $e");
+        return null;
+      }
+    } else {
+      // Handle file paths
+      return FileImage(File(adminInfoModel.imagePath));
     }
   }
 
@@ -193,14 +215,17 @@ class _AdminPageWidgetState extends State<AdminPageWidget> {
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
-                            const CircleAvatar(
+                            CircleAvatar(
                               radius: 28,
-                              backgroundColor: Color(0xFF455A64),
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 32,
-                              ),
+                              backgroundColor: const Color(0xFF455A64),
+                              backgroundImage: _getImageProvider(),
+                              child: adminInfoModel.imagePath.isEmpty
+                                  ? const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 32,
+                                    )
+                                  : null,
                             ),
                             const SizedBox(width: 16),
                             Column(

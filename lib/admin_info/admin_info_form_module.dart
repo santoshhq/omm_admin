@@ -61,6 +61,29 @@ class AdminInfoModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reset all fields to empty/default values for new user signup
+  Future<void> resetForNewUser() async {
+    firstName = '';
+    lastName = '';
+    email = '';
+    apartment = '';
+    phone = '';
+    address = '';
+    imagePath = '';
+
+    // Clear SharedPreferences data for new user
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('admin_image_path');
+      await prefs.setBool('isProfileComplete', false);
+      debugPrint("🧹 Cleared previous user data from SharedPreferences");
+    } catch (e) {
+      debugPrint("⚠️ Error clearing SharedPreferences: $e");
+    }
+
+    notifyListeners();
+  }
+
   /// Check if admin profile is complete
   bool get isProfileComplete {
     return firstName.trim().isNotEmpty &&
@@ -77,7 +100,7 @@ class AdminInfoModel extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       debugPrint("💾 Saving profile completion status: $isProfileComplete");
       debugPrint(
-        "💾 Profile data: firstName='$firstName', lastName='$lastName', email='$email', apartment='$apartment', phone='$phone', address='$address'",
+        "💾 Profile data: firstName='$firstName', lastName='$lastName', email='$email', apartment='$apartment', phone='$phone', address='$address', imagePath='$imagePath'",
       );
 
       await prefs.setBool('isProfileComplete', isProfileComplete);
@@ -88,6 +111,7 @@ class AdminInfoModel extends ChangeNotifier {
         await prefs.setString('admin_apartment', apartment);
         await prefs.setString('admin_phone', phone);
         await prefs.setString('admin_address', address);
+        await prefs.setString('admin_image_path', imagePath);
         debugPrint("✅ Profile data saved successfully");
       } else {
         debugPrint("❌ Profile incomplete, not saving user data");
@@ -122,6 +146,7 @@ class AdminInfoModel extends ChangeNotifier {
           apartment: prefs.getString('admin_apartment') ?? '',
           phone: prefs.getString('admin_phone') ?? '',
           address: prefs.getString('admin_address') ?? '',
+          imagePath: prefs.getString('admin_image_path') ?? '',
         );
       }
     } catch (e) {
