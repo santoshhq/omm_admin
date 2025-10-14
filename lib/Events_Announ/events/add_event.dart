@@ -24,6 +24,7 @@ class _AddEventPageState extends State<AddEventPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _targetController = TextEditingController();
+  final TextEditingController _upiController = TextEditingController();
   DateTime? _startDate;
   DateTime? _endDate;
 
@@ -43,6 +44,7 @@ class _AddEventPageState extends State<AddEventPage> {
     _titleController.dispose();
     _descriptionController.dispose();
     _targetController.dispose();
+    _upiController.dispose();
     for (final c in _detailControllers) {
       c.dispose();
     }
@@ -55,6 +57,7 @@ class _AddEventPageState extends State<AddEventPage> {
       _titleController.text = event.name;
       _descriptionController.text = event.description;
       _targetController.text = event.targetAmount.toString();
+      _upiController.text = event.upiId ?? '';
       _startDate = event.startDate;
       _endDate = event.endDate;
 
@@ -253,6 +256,7 @@ class _AddEventPageState extends State<AddEventPage> {
           description: _descriptionController.text.trim(),
           targetamount: double.parse(_targetController.text),
           eventdetails: eventDetails,
+          upiId: _upiController.text.trim(),
         );
 
         final updatedEvent = Festival.fromJson(response['data']);
@@ -275,6 +279,7 @@ class _AddEventPageState extends State<AddEventPage> {
           targetamount: double.parse(_targetController.text),
           eventdetails: eventDetails,
           adminId: adminId,
+          upiId: _upiController.text.trim(),
         );
 
         final newEvent = Festival.fromJson(response['data']);
@@ -596,6 +601,24 @@ class _AddEventPageState extends State<AddEventPage> {
                   ),
                   validator: (value) =>
                       value!.isEmpty ? "Enter target amount" : null,
+                ),
+                const SizedBox(height: 16),
+                // UPI ID
+                TextFormField(
+                  controller: _upiController,
+                  decoration: InputDecoration(
+                    labelText: "UPI ID",
+                    prefixIcon: const Icon(
+                      Icons.account_balance_wallet,
+                      color: Colors.deepOrange,
+                    ),
+                    labelStyle: GoogleFonts.poppins(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    hintText: "example@upi",
+                  ),
+                  validator: (value) => value!.isEmpty ? "Enter UPI ID" : null,
                 ),
                 const SizedBox(height: 24),
                 // Event Details

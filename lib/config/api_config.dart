@@ -76,6 +76,20 @@ class ApiService {
     }
   }
 
+  // Dynamic base URL for donations based on platform
+  static String get donationsBaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/donations";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/donations";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/donations";
+    }
+  }
+
   // Dynamic base URL for announcements based on platform
   static String get announcementsBaseUrl {
     if (Platform.isAndroid) {
@@ -1277,14 +1291,15 @@ class ApiService {
     required double targetamount,
     List<String>? eventdetails,
     required String adminId,
+    required String upiId,
   }) async {
     try {
       print("🚀 Creating event card...");
       print("📅 Event: $name");
       print("🖼️ Image data length: ${image?.length ?? 0} characters");
-      print("🌐 URL: $eventsBaseUrl");
+      print("🌐 URL: $eventsBaseUrl/admin/$adminId");
 
-      final url = Uri.parse(eventsBaseUrl);
+      final url = Uri.parse("$eventsBaseUrl/admin/$adminId");
 
       // Convert single image to array format that backend expects
       List<String> images = [];
@@ -1306,7 +1321,7 @@ class ApiService {
           "description": description,
           "targetamount": targetamount,
           "eventdetails": eventdetails ?? [],
-          "adminId": adminId,
+          "upiId": upiId,
         }),
       );
 
@@ -1839,6 +1854,7 @@ class ApiService {
     double? targetamount,
     List<String>? eventdetails,
     bool? status,
+    String? upiId,
   }) async {
     try {
       print("🚀 Updating event card...");
@@ -1860,6 +1876,7 @@ class ApiService {
       if (targetamount != null) updateData["targetamount"] = targetamount;
       if (eventdetails != null) updateData["eventdetails"] = eventdetails;
       if (status != null) updateData["status"] = status;
+      if (upiId != null) updateData["upiId"] = upiId;
 
       final url = Uri.parse("$eventsBaseUrl/admin/$adminId/event/$id");
 
@@ -2022,6 +2039,36 @@ class ApiService {
         );
       }
       throw Exception("Failed to add donation: $e");
+    }
+  }
+
+  /// Update donation status
+  static Future<Map<String, dynamic>> updateDonationStatus({
+    required String donationId,
+    required String adminId,
+    required String status,
+  }) async {
+    try {
+      final url = Uri.parse("$donationsBaseUrl/$donationId/$adminId");
+
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"status": status}),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return {
+          "success": true,
+          "message": body["message"],
+          "data": body["data"],
+        };
+      } else {
+        throw Exception("Failed to update donation status");
+      }
+    } catch (e) {
+      throw Exception("Error updating donation status: $e");
     }
   }
 

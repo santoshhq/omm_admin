@@ -12,6 +12,9 @@ class Festival {
   final DateTime? endDate;
   final bool isActive;
   final List<String> eventDetails;
+  final String? upiId;
+  final int totalDonors;
+  final double averageDonation;
 
   const Festival({
     this.id,
@@ -26,6 +29,9 @@ class Festival {
     this.endDate,
     this.isActive = true,
     this.eventDetails = const [],
+    this.upiId,
+    this.totalDonors = 0,
+    this.averageDonation = 0.0,
   });
 
   // Helper getter for backward compatibility
@@ -47,6 +53,9 @@ class Festival {
     DateTime? endDate,
     bool? isActive,
     List<String>? eventDetails,
+    String? upiId,
+    int? totalDonors,
+    double? averageDonation,
   }) {
     return Festival(
       id: id ?? this.id,
@@ -61,6 +70,9 @@ class Festival {
       endDate: endDate ?? this.endDate,
       isActive: isActive ?? this.isActive,
       eventDetails: eventDetails ?? this.eventDetails,
+      upiId: upiId ?? this.upiId,
+      totalDonors: totalDonors ?? this.totalDonors,
+      averageDonation: averageDonation ?? this.averageDonation,
     );
   }
 
@@ -156,6 +168,9 @@ class Festival {
       endDate: parseDate(json['enddate'] ?? json['endDate']),
       isActive: isActive,
       eventDetails: details,
+      upiId: json['upiId']?.toString(),
+      totalDonors: _parseInt(json['totalDonors'] ?? 0),
+      averageDonation: _parseDouble(json['averageDonation'] ?? 0),
     );
   }
 
@@ -172,6 +187,9 @@ class Festival {
       'startdate': startDate?.toUtc().toIso8601String(),
       'enddate': endDate?.toUtc().toIso8601String(),
       'donations': donations.map((donation) => donation.toJson()).toList(),
+      'upiId': upiId,
+      'totalDonors': totalDonors,
+      'averageDonation': averageDonation,
     };
 
     data.removeWhere((key, value) => value == null);
@@ -191,6 +209,7 @@ class Donation {
   final DateTime? date;
   final String? donorName;
   final String? donorFlat;
+  final String status; // 'pending', 'accepted', 'rejected'
 
   const Donation({
     this.id,
@@ -199,6 +218,7 @@ class Donation {
     this.date,
     this.donorName,
     this.donorFlat,
+    this.status = 'pending',
   });
 
   String get displayName => donorName?.trim().isNotEmpty == true
@@ -244,6 +264,7 @@ class Donation {
           : null,
       donorName: donorName,
       donorFlat: donorFlat,
+      status: json['status']?.toString() ?? 'pending',
     );
   }
 
@@ -254,6 +275,7 @@ class Donation {
       'date': date?.toUtc().toIso8601String(),
       'donorName': donorName,
       'donorFlat': donorFlat,
+      'status': status,
     };
 
     data.removeWhere((key, value) => value == null);
@@ -270,5 +292,12 @@ double _parseDouble(dynamic value) {
   if (value == null) return 0;
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? 0;
+  return 0;
+}
+
+int _parseInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
   return 0;
 }

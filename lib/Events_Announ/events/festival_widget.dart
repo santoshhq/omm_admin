@@ -286,7 +286,63 @@ class FestivalContentState extends State<FestivalContent> {
   }
 
   void _editEvent(int index) async {
-    await openAddEvent(context, existing: festivals[index]);
+    final festival = festivals[index];
+    if (festival.id == null) return;
+
+    try {
+      // Get admin ID
+      final adminId = await AdminSessionService.getAdminId();
+      if (adminId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Admin session expired. Please login again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Loading event details...')),
+        );
+      }
+
+      // Fetch complete event details from backend
+      final response = await ApiService.getEventCardById(
+        id: festival.id!,
+        adminId: adminId,
+      );
+      if (response['success'] == true) {
+        final completeEventData = response['data'];
+        final completeFestival = Festival.fromJson(completeEventData);
+
+        await openAddEvent(context, existing: completeFestival);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to load event details: ${response['message']}',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading event details: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _toggleEventStatus(Festival festival) async {

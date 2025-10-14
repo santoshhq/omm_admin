@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'modules.dart';
 import '../../config/api_config.dart';
 import '../../services/admin_session_service.dart';
+import 'showdonations.dart';
 
 class ViewDonationsPage extends StatefulWidget {
   final Festival festival;
@@ -19,6 +20,7 @@ class _ViewDonationsPageState extends State<ViewDonationsPage> {
   bool _isLoading = false;
   String? _errorMessage;
   bool _isDisposed = false;
+  bool _donationsUpdated = false;
 
   @override
   void initState() {
@@ -81,208 +83,6 @@ class _ViewDonationsPageState extends State<ViewDonationsPage> {
     super.dispose();
   }
 
-  void _showDonationsDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.7,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                // Dialog Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Donations List',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                      color: Colors.grey.shade600,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${festival.donations.length} donors • Total: ₹${festival.collectedAmount.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 20),
-
-                // Table Header
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(8),
-                    ),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        flex: 1,
-                        child: Text(
-                          'S.No',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const Expanded(
-                        flex: 3,
-                        child: Text(
-                          'User ID / Name',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Amount',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Donations List
-                Expanded(
-                  child: festival.donations.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.inbox_outlined,
-                                size: 64,
-                                color: Colors.grey.shade400,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No donations yet',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(8),
-                            ),
-                          ),
-                          child: ListView.builder(
-                            itemCount: festival.donations.length,
-                            itemBuilder: (context, index) {
-                              final donation = festival.donations[index];
-
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: index < festival.donations.length - 1
-                                      ? Border(
-                                          bottom: BorderSide(
-                                            color: Colors.grey.shade200,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      flex: 1,
-                                      child: Text(
-                                        '${index + 1}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            donation.displayName,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          if (donation.donorFlat != null)
-                                            Text(
-                                              'Flat: ${donation.donorFlat}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        '₹${donation.amount.toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green,
-                                        ),
-                                        textAlign: TextAlign.right,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -322,10 +122,9 @@ class _ViewDonationsPageState extends State<ViewDonationsPage> {
         ],
       );
     } else {
-      final totalDonors = festival.donations.length;
-      final averageDonation = totalDonors > 0
-          ? festival.collectedAmount / totalDonors
-          : 0.0;
+      // Use the statistics provided by the backend
+      final totalDonors = festival.totalDonors;
+      final averageDonation = festival.averageDonation;
       final progressPercentage = festival.progress * 100;
 
       content = CustomScrollView(
@@ -774,7 +573,21 @@ class _ViewDonationsPageState extends State<ViewDonationsPage> {
             child: Container(
               margin: const EdgeInsets.all(16),
               child: ElevatedButton.icon(
-                onPressed: _showDonationsDialog,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ShowDonationsPage(
+                        eventId: festival.id!,
+                        eventName: festival.name,
+                        onDonationStatusChanged: () {
+                          // Immediately refresh event details when donation status changes
+                          _loadEventDetails(showLoader: false);
+                        },
+                      ),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.volunteer_activism, color: Colors.white),
                 label: Text(
                   totalDonors == 0
