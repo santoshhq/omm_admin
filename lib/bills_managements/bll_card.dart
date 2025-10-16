@@ -4,14 +4,24 @@ import 'package:omm_admin/bills_managements/bills_status.dart';
 import 'package:omm_admin/services/admin_session_service.dart';
 
 /// 🔹 Bill Card Widget
-class BillCard extends StatelessWidget {
+class BillCard extends StatefulWidget {
   final Bill bill;
   final ValueChanged<String?>? onDelete;
 
   const BillCard({super.key, required this.bill, this.onDelete});
 
   @override
+  State<BillCard> createState() => _BillCardState();
+}
+
+class _BillCardState extends State<BillCard> {
+  bool _isDescriptionExpanded = false;
+  final int _maxDescriptionLength = 100;
+
+  @override
   Widget build(BuildContext context) {
+    final bill = widget.bill;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isSmallScreen = constraints.maxWidth < 400;
@@ -67,7 +77,7 @@ class BillCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Status Indicator
+                    // 🔘 Status Indicator
                     Container(
                       width: 50,
                       height: 50,
@@ -90,12 +100,12 @@ class BillCard extends StatelessWidget {
 
                     const SizedBox(width: 16),
 
-                    // Main Content
+                    // 📋 Main Content
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Bill Title
+                          // 🔹 Bill Title
                           Text(
                             bill.billTitle,
                             maxLines: 1,
@@ -109,7 +119,7 @@ class BillCard extends StatelessWidget {
 
                           const SizedBox(height: 8),
 
-                          // Category and Due Date
+                          // 🏷️ Category & Due Date
                           Row(
                             children: [
                               Icon(
@@ -150,7 +160,7 @@ class BillCard extends StatelessWidget {
 
                           const SizedBox(height: 6),
 
-                          // UPI and Created Date
+                          // 💳 UPI & Created Date
                           Row(
                             children: [
                               Icon(
@@ -188,7 +198,7 @@ class BillCard extends StatelessWidget {
                             ],
                           ),
 
-                          // Description (if space allows)
+                          // 📝 Description (if space allows)
                           if (!isSmallScreen) ...[
                             const SizedBox(height: 6),
                             Text(
@@ -208,7 +218,7 @@ class BillCard extends StatelessWidget {
 
                     const SizedBox(width: 12),
 
-                    // Amount Display
+                    // 💰 Amount Display
                     Container(
                       padding: const EdgeInsets.symmetric(
                         vertical: 10,

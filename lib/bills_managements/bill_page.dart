@@ -7,6 +7,7 @@ import 'package:omm_admin/bills_managements/bill_add_page.dart';
 import 'package:omm_admin/bills_managements/bill_request_model.dart';
 import 'package:omm_admin/config/api_config.dart';
 import 'package:omm_admin/services/admin_session_service.dart';
+import 'package:intl/intl.dart';
 
 class BillManagementPage extends StatefulWidget {
   const BillManagementPage({super.key});
@@ -17,7 +18,10 @@ class BillManagementPage extends StatefulWidget {
 
 class _BillManagementPageState extends State<BillManagementPage> {
   final List<Bill> bills = [];
+  final List<Bill> _filteredBills = [];
   double totalCollectedAmount = 0.0;
+  String _selectedMonth = Bill.getCurrentMonth();
+  bool _isMonthPickerExpanded = false;
 
   @override
   void initState() {
@@ -52,6 +56,7 @@ class _BillManagementPageState extends State<BillManagementPage> {
           setState(() {
             bills.clear();
             bills.addAll(fetchedBills);
+            _filterBillsByMonth(_selectedMonth);
           });
           // Calculate total collected amount after fetching bills
           _calculateTotalCollectedAmount();
@@ -64,6 +69,23 @@ class _BillManagementPageState extends State<BillManagementPage> {
     } catch (e) {
       print('Error in _fetchBills: $e');
     }
+  }
+
+  void _filterBillsByMonth(String monthName) {
+    final monthIndex =
+        Bill.months.indexOf(monthName) + 1; // Convert to 1-based month
+    final filteredBills = bills.where((bill) {
+      return bill.createdAt.month == monthIndex &&
+          bill.createdAt.year == DateTime.now().year;
+    }).toList();
+
+    setState(() {
+      _selectedMonth = monthName;
+      _filteredBills.clear();
+      _filteredBills.addAll(filteredBills);
+    });
+
+    print('Filtered ${filteredBills.length} bills for month: $monthName');
   }
 
   Future<void> _calculateTotalCollectedAmount() async {
@@ -137,6 +159,7 @@ class _BillManagementPageState extends State<BillManagementPage> {
         print('Bill created successfully, adding to list');
         setState(() {
           bills.add(responseData);
+          _filterBillsByMonth(_selectedMonth);
         });
         // Recalculate total collected amount after adding new bill
         _calculateTotalCollectedAmount();
@@ -230,63 +253,157 @@ class _BillManagementPageState extends State<BillManagementPage> {
                               ),
                             ],
                           ),
-                          // Month Button
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: const Color.fromARGB(
-                                255,
-                                240,
-                                242,
-                                243,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: spacing * 2,
-                                vertical: spacing * 0.8,
-                              ),
-                              minimumSize: const Size(0, 0),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          // Professional Month Picker
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            onPressed: () {
-                              final currentMonthIndex =
-                                  DateTime.now().month - 1;
-                              final previousMonths = Bill.months.sublist(
-                                0,
-                                currentMonthIndex,
-                              );
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Previous Months'),
-                                  content: SizedBox(
-                                    width: double.minPositive,
-                                    child: ListView.builder(
-                                      shrinkWrap: true,
-                                      itemCount: previousMonths.length,
-                                      itemBuilder: (context, index) => ListTile(
-                                        title: Text(previousMonths[index]),
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                        },
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  setState(() {
+                                    _isMonthPickerExpanded =
+                                        !_isMonthPickerExpanded;
+                                  });
+                                },
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: spacing * 1.5,
+                                    vertical: spacing * 0.8,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_month,
+                                        size: iconSize * 0.7,
+                                        color: Colors.blue.shade600,
                                       ),
-                                    ),
+                                      SizedBox(width: spacing * 0.5),
+                                      Text(
+                                        _selectedMonth,
+                                        style: TextStyle(
+                                          fontSize: fontSizeTitle * 0.85,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      SizedBox(width: spacing * 0.3),
+                                      Icon(
+                                        _isMonthPickerExpanded
+                                            ? Icons.keyboard_arrow_up
+                                            : Icons.keyboard_arrow_down,
+                                        size: iconSize * 0.7,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              );
-                            },
-                            child: Text(
-                              Bill.getCurrentMonth(),
-                              style: TextStyle(
-                                fontSize: fontSizeTitle * 0.85,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black87,
                               ),
                             ),
                           ),
                         ],
                       ),
+                      // Month Dropdown (when expanded)
+                      if (_isMonthPickerExpanded) ...[
+                        SizedBox(height: spacing),
+                        Container(
+                          constraints: BoxConstraints(maxHeight: 200),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: Bill.months.length,
+                            itemBuilder: (context, index) {
+                              final month = Bill.months[index];
+                              final isSelected = month == _selectedMonth;
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    _filterBillsByMonth(month);
+                                    setState(() {
+                                      _isMonthPickerExpanded = false;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: spacing * 1.5,
+                                      vertical: spacing,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.blue.shade50
+                                          : Colors.transparent,
+                                      border: Border(
+                                        bottom: index < Bill.months.length - 1
+                                            ? BorderSide(
+                                                color: Colors.grey.shade200,
+                                              )
+                                            : BorderSide.none,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: iconSize * 0.6,
+                                          color: isSelected
+                                              ? Colors.blue.shade600
+                                              : Colors.grey.shade600,
+                                        ),
+                                        SizedBox(width: spacing),
+                                        Text(
+                                          month,
+                                          style: TextStyle(
+                                            fontSize: fontSizeTitle * 0.8,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w500,
+                                            color: isSelected
+                                                ? Colors.blue.shade600
+                                                : Colors.black87,
+                                          ),
+                                        ),
+                                        if (isSelected) ...[
+                                          const Spacer(),
+                                          Icon(
+                                            Icons.check,
+                                            size: iconSize * 0.6,
+                                            color: Colors.blue.shade600,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                       SizedBox(height: spacing * 1.5),
                       // Amount Row with Rupee Icon
                       Row(
@@ -338,7 +455,7 @@ class _BillManagementPageState extends State<BillManagementPage> {
                           ),
                           SizedBox(width: spacing / 2),
                           Text(
-                            'Total Bills: ${bills.length}',
+                            'Total Bills: ${_filteredBills.length}',
                             style: TextStyle(
                               fontSize: fontSizeTitle * 0.85,
                               fontWeight: FontWeight.w500,
@@ -353,7 +470,7 @@ class _BillManagementPageState extends State<BillManagementPage> {
                           ),
                           SizedBox(width: spacing / 2),
                           Text(
-                            'Pending: ${bills.where((b) => !b.isPaid).length}',
+                            'Pending: ${_filteredBills.where((b) => !b.isPaid).length}',
                             style: TextStyle(
                               fontSize: fontSizeTitle * 0.85,
                               fontWeight: FontWeight.w500,
@@ -376,18 +493,42 @@ class _BillManagementPageState extends State<BillManagementPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: const [
-                        Icon(
-                          Icons.receipt_long,
-                          color: Colors.blueGrey,
-                          size: 22,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.receipt_long,
+                              color: Colors.blueGrey,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "Bills for $_selectedMonth",
+                              style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(width: 8),
-                        Text(
-                          "Current Bills",
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Text(
+                            '${_filteredBills.length} bill${_filteredBills.length != 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade700,
+                            ),
                           ),
                         ),
                       ],
@@ -396,14 +537,36 @@ class _BillManagementPageState extends State<BillManagementPage> {
                     Expanded(
                       child: SizedBox(
                         width: double.infinity,
-                        child: bills.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No bills yet',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey,
-                                  ),
+                        child: _filteredBills.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long_outlined,
+                                      size: 64,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No bills found for $_selectedMonth',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Try selecting a different month or create a new bill',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
                                 ),
                               )
                             : RefreshIndicator(
@@ -412,15 +575,16 @@ class _BillManagementPageState extends State<BillManagementPage> {
                                 },
                                 child: ListView.builder(
                                   padding: EdgeInsets.zero,
-                                  itemCount: bills.length,
+                                  itemCount: _filteredBills.length,
                                   itemBuilder: (context, index) => BillCard(
-                                    bill: bills[index],
+                                    bill: _filteredBills[index],
                                     onDelete: (deletedId) {
                                       if (deletedId == null) return;
                                       setState(() {
                                         bills.removeWhere(
                                           (b) => b.id == deletedId,
                                         );
+                                        _filterBillsByMonth(_selectedMonth);
                                       });
                                     },
                                   ),

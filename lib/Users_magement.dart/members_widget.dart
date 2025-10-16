@@ -55,10 +55,102 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
   Set<String> _occupiedParkingSlots = <String>{};
   bool _isLoadingParkingData = false;
 
-  bool get isStep1Valid => _formKeyStep1.currentState?.validate() ?? false;
-  bool get isStep2Valid => _formKeyStep2.currentState?.validate() ?? false;
-  bool get isStep3Valid => _formKeyStep3.currentState?.validate() ?? false;
-  bool get isStep4Valid => _formKeyStep4.currentState?.validate() ?? false;
+  // Optimized validation getters that check field values directly
+  bool get isStep1Valid {
+    // Check field values directly instead of form validation
+    final firstNameValid = _firstController.text.trim().isNotEmpty;
+    final lastNameValid = _lastController.text.trim().isNotEmpty;
+    final mobileValid =
+        _mobileController.text.trim().length == 13 &&
+        _mobileController.text.trim().startsWith('+91');
+    final emailValid =
+        _emailController.text.trim().isNotEmpty &&
+        RegExp(
+          r"^[\w\-.]+@([\w-]+\.)+[\w]{2,4}",
+        ).hasMatch(_emailController.text.trim());
+
+    final isValid =
+        firstNameValid && lastNameValid && mobileValid && emailValid;
+    if (!isValid) {
+      print("❌ Step 1 validation failed:");
+      print(
+        "  - First name: '${_firstController.text.trim()}' (${firstNameValid})",
+      );
+      print(
+        "  - Last name: '${_lastController.text.trim()}' (${lastNameValid})",
+      );
+      print(
+        "  - Mobile: '${_mobileController.text.trim()}' (length: ${_mobileController.text.trim().length}, starts with +91: ${_mobileController.text.trim().startsWith('+91')}) -> ${mobileValid}",
+      );
+      print("  - Email: '${_emailController.text.trim()}' (${emailValid})");
+    }
+    return isValid;
+  }
+
+  bool get isStep2Valid {
+    final flatNoValid = _flatNoController.text.trim().isNotEmpty;
+    final floorValid = model.floor != null && model.floor!.isNotEmpty;
+    final paymentStatusValid =
+        model.paymentStatus != null && model.paymentStatus!.isNotEmpty;
+    final parkingAreaValid =
+        model.parkingArea != null && model.parkingArea!.isNotEmpty;
+    final parkingSlotValid =
+        model.parkingSlot != null && model.parkingSlot!.isNotEmpty;
+
+    final isValid =
+        flatNoValid &&
+        floorValid &&
+        paymentStatusValid &&
+        parkingAreaValid &&
+        parkingSlotValid;
+    if (!isValid) {
+      print("❌ Step 2 validation failed:");
+      print(
+        "  - Flat number: '${_flatNoController.text.trim()}' (${flatNoValid})",
+      );
+      print("  - Floor: '${model.floor}' (${floorValid})");
+      print(
+        "  - Payment status: '${model.paymentStatus}' (${paymentStatusValid})",
+      );
+      print("  - Parking area: '${model.parkingArea}' (${parkingAreaValid})");
+      print("  - Parking slot: '${model.parkingSlot}' (${parkingSlotValid})");
+    }
+    return isValid;
+  }
+
+  bool get isStep3Valid {
+    final govtIdTypeValid =
+        model.govtIdType != null && model.govtIdType!.isNotEmpty;
+    final govtIdImageValid = model.govtIdImage != null;
+
+    final isValid = govtIdTypeValid && govtIdImageValid;
+    if (!isValid) {
+      print("❌ Step 3 validation failed:");
+      print("  - Govt ID Type: '${model.govtIdType}' (${govtIdTypeValid})");
+      print("  - Govt ID Image: '${model.govtIdImage}' (${govtIdImageValid})");
+    }
+    return isValid;
+  }
+
+  bool get isStep4Valid {
+    final userIdValid = _userIdController.text.trim().isNotEmpty;
+    final passwordValid = _passwordController.text.length >= 6;
+    final passwordsMatch =
+        _passwordController.text == _rePasswordController.text;
+
+    final isValid = userIdValid && passwordValid && passwordsMatch;
+    if (!isValid) {
+      print("❌ Step 4 validation failed:");
+      print("  - User ID: '${_userIdController.text.trim()}' (${userIdValid})");
+      print(
+        "  - Password length: ${_passwordController.text.length} (>= 6: ${passwordValid})",
+      );
+      print(
+        "  - Passwords match: '${_passwordController.text}' == '${_rePasswordController.text}' (${passwordsMatch})",
+      );
+    }
+    return isValid;
+  }
 
   @override
   void initState() {
@@ -186,14 +278,25 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
     return null;
   }
 
-  // Helper to validate a step dynamically
-  bool _validateStep(int step) {
-    final forms = [_formKeyStep1, _formKeyStep2, _formKeyStep3, _formKeyStep4];
-    return forms[step].currentState?.validate() ?? false;
-  }
-
   void _nextPage() {
-    if (_validateStep(_currentStep)) {
+    // Use optimized validation getters
+    bool isValid = false;
+    switch (_currentStep) {
+      case 0:
+        isValid = isStep1Valid;
+        break;
+      case 1:
+        isValid = isStep2Valid;
+        break;
+      case 2:
+        isValid = isStep3Valid;
+        break;
+      case 3:
+        isValid = isStep4Valid;
+        break;
+    }
+
+    if (isValid) {
       // Step 1 values
       if (_currentStep == 0) {
         model.firstName = _firstController.text.trim();
@@ -238,59 +341,48 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
   }
 
   void _submitMember() async {
-    if (_isSubmitting) return; // Prevent multiple submissions
+    print("🚀 Starting member submission process...");
+
+    if (_isSubmitting) {
+      print("⚠️ Submission already in progress, ignoring duplicate request");
+      return; // Prevent multiple submissions
+    }
 
     // Get admin ID from session service
     _adminId = await AdminSessionService.getAdminId();
+    print("👤 Admin ID retrieved: $_adminId");
 
     if (_adminId == null) {
+      print("❌ Admin session expired - no admin ID found");
       _showErrorDialog("Admin session expired. Please login again.");
       return;
     }
 
+    // Update model values from controllers before validation
+    print("🔄 Updating model values from controllers...");
+    model.firstName = _firstController.text.trim();
+    model.lastName = _lastController.text.trim();
+    model.mobile = _mobileController.text.trim();
+    model.email = _emailController.text.trim();
+    model.flatNo = _flatNoController.text.trim();
+    model.userId = _userIdController.text.trim();
+    model.password = _passwordController.text;
+
     // Validate all required fields before submission
+    print("🔍 Running comprehensive validation...");
     if (!_validateAllSteps()) {
-      _showErrorDialog("Please fill all required fields correctly.");
+      print("❌ Overall validation failed - checking individual steps:");
+      print("  Step 1 valid: $isStep1Valid");
+      print("  Step 2 valid: $isStep2Valid");
+      print("  Step 3 valid: $isStep3Valid");
+      print("  Step 4 valid: $isStep4Valid");
+      _showErrorDialog(
+        "Please fill all required fields correctly.\n\nValidation failed for one or more steps.",
+      );
       return;
     }
 
-    // Additional validation for required fields
-    if (model.firstName == null || model.firstName!.isEmpty) {
-      _showErrorDialog("First name is required");
-      return;
-    }
-    if (model.lastName == null || model.lastName!.isEmpty) {
-      _showErrorDialog("Last name is required");
-      return;
-    }
-    if (model.mobile == null || model.mobile!.isEmpty) {
-      _showErrorDialog("Mobile number is required");
-      return;
-    }
-    if (model.email == null || model.email!.isEmpty) {
-      _showErrorDialog("Email is required");
-      return;
-    }
-    if (model.floor == null || model.floor!.isEmpty) {
-      _showErrorDialog("Floor is required");
-      return;
-    }
-    if (model.flatNo == null || model.flatNo!.isEmpty) {
-      _showErrorDialog("Flat number is required");
-      return;
-    }
-    if (model.govtIdType == null || model.govtIdType!.isEmpty) {
-      _showErrorDialog("Government ID type is required");
-      return;
-    }
-    if (model.parkingArea == null || model.parkingArea!.isEmpty) {
-      _showErrorDialog("Parking area is required");
-      return;
-    }
-    if (model.parkingSlot == null || model.parkingSlot!.isEmpty) {
-      _showErrorDialog("Parking slot is required");
-      return;
-    }
+    print("✅ All validations passed, proceeding with submission...");
 
     setState(() {
       _isSubmitting = true;
@@ -310,6 +402,15 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
       print("  Floor: ${model.floor}, Flat: ${model.flatNo}");
       print("  Parking: ${model.parkingArea}, ${model.parkingSlot}");
       print("  Govt ID Type: ${model.govtIdType}");
+      print("  Password length: ${model.password?.length ?? 0}");
+      print(
+        "  Profile Image: ${model.profileImage != null ? 'Present' : 'Null'}",
+      );
+      print(
+        "  Govt ID Image: ${model.govtIdImage != null ? 'Present' : 'Null'}",
+      );
+
+      print("📡 Making API call to adminCreateMember...");
 
       // Call API to create member
       final result = await ApiService.adminCreateMember(
@@ -330,6 +431,11 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
         govtIdImage: model.govtIdImage?.toString() ?? "placeholder_image",
       );
 
+      print("📨 API call completed, result received:");
+      print("  Success: ${result['success']}");
+      print("  Message: ${result['message']}");
+      print("  Has data: ${result['data'] != null}");
+
       if (mounted) {
         setState(() {
           _isSubmitting = false;
@@ -345,29 +451,61 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
           );
         }
       } else {
+        // Provide more specific error message
+        String errorMessage = result['message'] ?? "Failed to create member";
+        if (errorMessage.contains('duplicate') ||
+            errorMessage.contains('already exists')) {
+          errorMessage =
+              "A member with this email or mobile number already exists.";
+        } else if (errorMessage.contains('validation')) {
+          errorMessage = "Please check all fields and try again.";
+        }
+
         if (mounted) {
-          _showErrorDialog(result['message'] ?? "Failed to create member");
+          _showErrorDialog("Failed to create member: $errorMessage");
         }
       }
     } catch (e) {
+      print("💥 Exception caught during member creation:");
+      print("  Exception type: ${e.runtimeType}");
+      print("  Exception message: ${e.toString()}");
+
       if (mounted) {
         setState(() {
           _isSubmitting = false;
         });
       }
 
-      print("Error creating member: $e");
+      // Provide user-friendly error messages
+      String userFriendlyMessage =
+          "An unexpected error occurred while creating the member.";
+
+      if (e.toString().contains('network') ||
+          e.toString().contains('connection')) {
+        userFriendlyMessage =
+            "Network error. Please check your internet connection and try again.";
+      } else if (e.toString().contains('timeout')) {
+        userFriendlyMessage = "Request timed out. Please try again.";
+      } else if (e.toString().contains('400')) {
+        userFriendlyMessage = "Invalid data provided. Please check all fields.";
+      } else if (e.toString().contains('500')) {
+        userFriendlyMessage = "Server error. Please try again later.";
+      }
+
+      print("📝 Final error message to user: $userFriendlyMessage");
+
       if (mounted) {
-        _showErrorDialog("Error creating member: ${e.toString()}");
+        _showErrorDialog(
+          "$userFriendlyMessage\n\nTechnical details: ${e.toString()}",
+        );
       }
     }
+
+    print("🏁 Member submission process completed");
   }
 
   bool _validateAllSteps() {
-    return _isStepFilled(0) &&
-        _isStepFilled(1) &&
-        _isStepFilled(2) &&
-        _isStepFilled(3);
+    return isStep1Valid && isStep2Valid && isStep3Valid && isStep4Valid;
   }
 
   void _showErrorDialog(String message) {
@@ -449,28 +587,6 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
         ],
       ),
     );
-  }
-
-  bool _isStepFilled(int step) {
-    switch (step) {
-      case 0:
-        return _firstController.text.trim().isNotEmpty &&
-            _lastController.text.trim().isNotEmpty &&
-            _mobileController.text.trim().length >= 10 &&
-            RegExp(
-              r'^[\w\-.]+@([\w-]+\.)+[\w]{2,4}$',
-            ).hasMatch(_emailController.text.trim());
-      case 1:
-        return _flatNoController.text.trim().isNotEmpty && model.floor != null;
-      case 2:
-        return model.govtIdType != null && model.govtIdImage != null;
-      case 3:
-        return _userIdController.text.trim().isNotEmpty &&
-            _passwordController.text.length >= 6 &&
-            _passwordController.text == _rePasswordController.text;
-      default:
-        return false;
-    }
   }
 
   /// Generates userId based on floor and flat number
@@ -589,6 +705,7 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
       validator: validator,
       keyboardType: keyboardType,
       maxLength: maxLength,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -614,8 +731,8 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
       'Login Credentials',
     ];
 
-    // Determine if next button is enabled
-    bool canGoNext = _isStepFilled(_currentStep);
+    // Optimized validation - use the reliable getters
+    bool canGoNext;
     switch (_currentStep) {
       case 0:
         canGoNext = isStep1Valid;
@@ -624,14 +741,13 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
         canGoNext = isStep2Valid;
         break;
       case 2:
-        canGoNext =
-            isStep3Valid &&
-            model.govtIdType != null &&
-            model.govtIdImage != null;
+        canGoNext = isStep3Valid;
         break;
       case 3:
         canGoNext = isStep4Valid;
         break;
+      default:
+        canGoNext = false;
     }
 
     return WillPopScope(
@@ -808,12 +924,14 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
             _firstController,
             'First Name',
             validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+            onChanged: (value) => setState(() {}),
           ),
           const SizedBox(height: 12),
           _buildTextField(
             _lastController,
             'Last Name',
             validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+            onChanged: (value) => setState(() {}),
           ),
           const SizedBox(height: 12),
           _buildTextField(
@@ -828,6 +946,7 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
               }
               return null;
             },
+            onChanged: (value) => setState(() {}),
           ),
           const SizedBox(height: 12),
           _buildTextField(
@@ -842,6 +961,7 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
               }
               return null;
             },
+            onChanged: (value) => setState(() {}),
           ),
         ],
       ),
@@ -861,6 +981,7 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
                 'Flat No',
                 keyboardType: TextInputType.number,
                 validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                onChanged: (value) => setState(() {}),
               ),
               const SizedBox(height: 12),
 
@@ -988,8 +1109,9 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
             items: [
               'AadharCard',
               'PanCard',
-              'VoterId',
+              'VoterID',
               'Passport',
+              'DrivingLicense',
             ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
             onChanged: (v) => setState(() => model.govtIdType = v),
             validator: (v) => v == null ? 'Select Govt ID type' : null,
@@ -1181,18 +1303,19 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
     );
   }
 
-  // ✅ Updated logic for "Next/Submit" button
+  // ✅ Optimized logic for "Next/Submit" button
   bool get canGoNext {
-    if (_currentStep < totalSteps - 1) {
-      return _validateStep(_currentStep);
-    } else {
-      // Last step: check form validity + auto-generated ID + password match
-      final formValid = _formKeyStep4.currentState?.validate() ?? false;
-      final idFilled = model.userId?.isNotEmpty ?? false;
-      final passwordsValid =
-          _passwordController.text.isNotEmpty &&
-          _passwordController.text == _rePasswordController.text;
-      return formValid && idFilled && passwordsValid;
+    switch (_currentStep) {
+      case 0:
+        return isStep1Valid;
+      case 1:
+        return isStep2Valid;
+      case 2:
+        return isStep3Valid;
+      case 3:
+        return isStep4Valid;
+      default:
+        return false;
     }
   }
 }
