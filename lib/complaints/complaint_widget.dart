@@ -277,6 +277,9 @@ class _ComplaintPageState extends State<ComplaintPage> {
       );
 
       print('✅ Loaded ${complaints.length} complaints');
+      print(
+        '📋 Complaints data: ${complaints.map((c) => {'id': c.id, 'title': c.title}).toList()}',
+      );
 
       // Load unread message counts for all complaints
       final complaintIds = complaints

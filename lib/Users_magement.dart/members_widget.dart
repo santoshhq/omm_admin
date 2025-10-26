@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'memebers_module.dart';
 import 'dart:io';
+import 'dart:math';
 import '../config/api_config.dart';
 import '../services/admin_session_service.dart';
 
@@ -589,58 +590,13 @@ class _MemberRegistrationFlowState extends State<MemberRegistrationFlow> {
     );
   }
 
-  /// Generates userId based on floor and flat number
-  /// Format: [Floor][Flat][Sum] = 6 digits total
-  /// Examples:
-  /// - FlatNo: 101, FloorNo: II → UserID: "210103" (2+1=3, padded to 03)
-  /// - FlatNo: 11, FloorNo: 1 → UserID: "101102" (1+0=1, padded to 02)
-  /// Last two digits are sum of first two digits
-  /// NOTE: This should only be called once per registration to ensure userId stability
+  /// Generates a random unique 6-digit userId
+  /// Format: Random number between 100000 and 999999
+  /// Uniqueness is ensured by the backend during member creation
   String _generateUserId() {
-    final floorMap = {
-      'I': '1',
-      'II': '2',
-      'III': '3',
-      'IV': '4',
-      'V': '5',
-      'VI': '6',
-      'VII': '7',
-      'VIII': '8',
-      'IX': '9',
-    };
-
-    // Get floor digit - use model.floor if available, otherwise default
-    final floorDigit = floorMap[model.floor] ?? '0';
-
-    // Get flat number - use model.flatNo if available, otherwise controller
-    final flat = (model.flatNo?.isNotEmpty == true)
-        ? model.flatNo!.trim()
-        : _flatNoController.text.trim();
-
-    // Debug: Check if we have required data
-    print(
-      'Debug - Floor: ${model.floor}, FloorDigit: $floorDigit, Flat: $flat',
-    );
-
-    if (flat.isEmpty || model.floor == null) {
-      print('Debug - Missing data: floor=${model.floor}, flat=$flat');
-      return '100001'; // fallback
-    }
-
-    // Flat should always be 3 digits
-    String formattedFlat = flat.padLeft(3, '0');
-
-    // Sum = Floor digit + First digit of original flat number
-    int floorNum = int.parse(floorDigit);
-    int firstFlatDigit = int.parse(flat[0]); // First digit of original flat
-
-    int sum = floorNum + firstFlatDigit;
-    String sumSuffix = sum.toString().padLeft(2, '0');
-
-    // Format: FloorDigit + Flat (3 digits) + Sum(floor + first flat digit)
-    final result = '$floorDigit$formattedFlat$sumSuffix';
-    print('Debug - Generated UserID: $result');
-    return result;
+    final random = Random();
+    int userId = 100000 + random.nextInt(900000); // Generates 100000 to 999999
+    return userId.toString();
   }
 
   Future<void> _pickGovtIdImage() async {

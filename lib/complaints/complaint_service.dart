@@ -48,20 +48,33 @@ class ComplaintService {
     try {
       print('🔄 ComplaintService: Loading admin complaints');
       final adminId = await _getAdminId();
+      print('🔑 Admin ID from session: $adminId');
 
       if (adminId == null) {
         throw Exception('Admin session not found. Please login again.');
       }
+
+      print('📋 Fetching complaints for admin: $adminId, status: $status');
 
       final response = await ApiService.getAdminComplaints(
         adminId,
         status: status,
       );
 
+      print('🔍 Raw API Response: $response');
+
       if (response['success'] == true) {
         final List<dynamic> complaintsJson = response['data'] ?? [];
-        return complaintsJson.map((json) => Complaint.fromJson(json)).toList();
+        print('✅ Parsed ${complaintsJson.length} complaints from response');
+
+        final complaints = complaintsJson
+            .map((json) => Complaint.fromJson(json))
+            .toList();
+        print('✅ Successfully parsed ${complaints.length} complaints');
+
+        return complaints;
       } else {
+        print('❌ API response indicates failure: ${response['message']}');
         throw Exception(response['message'] ?? 'Failed to fetch complaints');
       }
     } catch (e) {

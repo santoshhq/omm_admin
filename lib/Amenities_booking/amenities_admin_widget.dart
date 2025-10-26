@@ -18,7 +18,7 @@ class AmenitiesAdminPage extends StatefulWidget {
 
 class _AmenitiesAdminPageState extends State<AmenitiesAdminPage> {
   bool _isLoading = false;
-  final Set<int> _togglingAmenities =
+  final Set<int> _togglingAmenities = 
       <int>{}; // Track which amenities are being toggled
 
   @override
