@@ -9,6 +9,7 @@ import 'package:omm_admin/admin_info/admin_info_form_module.dart';
 import 'package:omm_admin/config/api_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omm_admin/services/admin_session_service.dart';
+import 'package:omm_admin/security_guards/security_guard_login.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -222,19 +223,23 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 24),
 
-              /// Social login button (Google only)
-              const Text("Or Continue with"),
+              /// Security login button
+              const Text("Or"),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.g_mobiledata,
-                    color: Color(0xFF455A64),
-                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SecurityGuardLoginPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.security, color: Color(0xFF455A64)),
                   label: const Text(
-                    'Continue with Google',
+                    'Security Login',
                     style: TextStyle(fontSize: 16, color: Color(0xFF455A64)),
                   ),
                   style: OutlinedButton.styleFrom(

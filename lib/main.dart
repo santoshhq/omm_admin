@@ -4,6 +4,7 @@ import 'package:omm_admin/bottum_navigation.dart';
 import 'package:omm_admin/admin_info/admin_info_form_widget.dart';
 import 'package:omm_admin/admin_info/admin_info_form_module.dart';
 import 'package:omm_admin/complaints/complaint_service.dart';
+import 'package:omm_admin/security_guards/security_guard_login.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -98,6 +99,7 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginPage(),
         '/admin-info': (context) => const AdminInfoFormPage(),
         '/main': (context) => const BottumNavigation(),
+        '/security-login': (context) => const SecurityGuardLoginPage(),
       },
     );
   }

@@ -12,6 +12,7 @@ class SecurityGuardModel {
   String assignedGate;
   String gender;
   String? imageUrl;
+  String password; // Added password field
 
   SecurityGuardModel({
     this.id,
@@ -23,6 +24,7 @@ class SecurityGuardModel {
     required this.assignedGate,
     required this.gender,
     this.imageUrl,
+    required this.password, // Added password parameter
   });
 
   factory SecurityGuardModel.fromJson(Map<String, dynamic> json) {
@@ -39,6 +41,7 @@ class SecurityGuardModel {
       assignedGate: json['assigngates'],
       gender: json['gender'],
       imageUrl: json['guardimage'],
+      password: json['password'] ?? '', // Added password from JSON
     );
   }
 
@@ -52,6 +55,7 @@ class SecurityGuardModel {
       "age": age,
       "assigngates": assignedGate,
       "gender": gender.toLowerCase(),
+      "password": password, // Added password to JSON
     };
   }
 }

@@ -21,6 +21,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
   final _last = TextEditingController();
   final _age = TextEditingController();
   final _mobile = TextEditingController();
+  final _password = TextEditingController(); // Added password controller
   String? _gate;
   String? _gender;
   File? _imageFile;
@@ -35,6 +36,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
       _last.text = widget.guard!.lastName;
       _age.text = widget.guard!.age.toString();
       _mobile.text = widget.guard!.mobile;
+      _password.text = widget.guard!.password; // Added password initialization
       _gate = widget.guard!.assignedGate;
       // Map backend gender value to display value
       final g = widget.guard!.gender.trim().toLowerCase();
@@ -57,6 +59,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
     _last.dispose();
     _age.dispose();
     _mobile.dispose();
+    _password.dispose(); // Added password dispose
     super.dispose();
   }
 
@@ -142,6 +145,7 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
         assignedGate: _gate!,
         gender: (_gender ?? 'Male').toLowerCase(),
         imageUrl: _imageFile?.path ?? _existingImageUrl,
+        password: _password.text.trim(), // Added password field
       );
       Map<String, dynamic> result;
       SecurityGuardModel? returnedGuard;
@@ -428,6 +432,20 @@ class _SecurityFormPageState extends State<SecurityFormPage> {
                   if (!RegExp(r'^[0-9]{10}$').hasMatch(v)) {
                     return 'Enter 10 digits';
                   }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Password
+              TextFormField(
+                controller: _password,
+                obscureText: true,
+                decoration: _inputDecoration("Password"),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Password is required';
+                  if (v.length < 6)
+                    return 'Password must be at least 6 characters';
                   return null;
                 },
               ),

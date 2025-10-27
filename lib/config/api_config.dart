@@ -1,6 +1,7 @@
 // api_service.dart
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omm_admin/security_guards/security_module.dart';
 import '../services/admin_session_service.dart';
@@ -101,6 +102,34 @@ class ApiService {
     } else {
       // For web/desktop development
       return "http://localhost:8080/api/announcements";
+    }
+  }
+
+  // Dynamic base URL for security guards based on platform
+  static String get securityBaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/security";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/security";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/security";
+    }
+  }
+
+  // Dynamic base URL for visitors based on platform
+  static String get visitorsBaseUrl {
+    if (Platform.isAndroid) {
+      // For Android emulator, use 10.0.2.2 to access host machine
+      return "http://10.0.2.2:8080/api/visitors";
+    } else if (Platform.isIOS) {
+      // For iOS simulator, use localhost or your machine's IP
+      return "http://localhost:8080/api/visitors";
+    } else {
+      // For web/desktop development
+      return "http://localhost:8080/api/visitors";
     }
   }
 
@@ -219,7 +248,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ Login successful!");
         // Convert backend response to frontend expected format
         return {
@@ -269,7 +299,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ OTP verification successful!");
         return true;
       } else {
@@ -303,7 +334,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         // Convert backend response to frontend expected format
         return {
           "success": true,
@@ -344,7 +376,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         // Convert backend response to frontend expected format
         return {"success": true, "message": body["message"]};
       } else {
@@ -409,7 +442,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 201 && body["status"] == true) {
+      if (response.statusCode == 201 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ Admin profile created successfully!");
         return {
           "success": true,
@@ -453,7 +487,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ Admin profile fetched successfully!");
         print("🔍 Profile data: ${body["data"]}");
         return {"success": true, "data": body["data"]};
@@ -495,7 +530,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ All admin profiles fetched successfully!");
         return {"success": true, "data": body["data"]};
       } else {
@@ -550,7 +586,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ Admin profile updated successfully!");
         return {
           "success": true,
@@ -594,7 +631,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["status"] == true) {
+      if (response.statusCode == 200 &&
+          (body["status"] == true || body["success"] == true)) {
         print("✅ Profile status updated successfully!");
         return {"success": true, "message": body["message"]};
       } else {
@@ -675,7 +713,7 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 201 && body["success"] == true) {
+      if (response.statusCode == 201 && (body["success"] == true)) {
         print("✅ Member created successfully!");
         return {
           "success": true,
@@ -716,7 +754,7 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["success"] == true) {
+      if (response.statusCode == 200 && (body["success"] == true)) {
         print("✅ Members fetched successfully! Count: ${body["count"]}");
         return {"success": true, "count": body["count"], "data": body["data"]};
       } else {
@@ -758,7 +796,7 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["success"] == true) {
+      if (response.statusCode == 200 && (body["success"] == true)) {
         print("✅ Member login successful!");
         return {
           "success": true,
@@ -3102,6 +3140,7 @@ class ApiService {
         'assigngates': guard.assignedGate,
         'gender': guard.gender,
         'guardimage': base64Image,
+        'password': guard.password, // Added password field
       });
 
       final response = await http.post(
@@ -3175,6 +3214,7 @@ class ApiService {
         'age': updatedGuard.age,
         'assigngates': updatedGuard.assignedGate,
         'gender': updatedGuard.gender,
+        'password': updatedGuard.password, // Added password field
         if (base64Image != null) 'guardimage': base64Image,
       };
 
@@ -3460,4 +3500,217 @@ class ApiService {
   /// Update bill request by ID
   static String updateBillRequest(String requestId) =>
       '$billRequestsBaseUrl/$requestId';
+
+  // ==================== VISITOR MANAGEMENT APIs ====================
+
+  /// Approve a visitor (requires login credentials)
+  static Future<Map<String, dynamic>> approveVisitor({
+    required String guardId,
+    String? visitorId,
+    String? otpCode,
+    String? qrData,
+  }) async {
+    try {
+      print("✅ Approving visitor");
+      print("� Guard ID: $guardId");
+      if (visitorId != null) print("🆔 Visitor ID: $visitorId");
+      if (otpCode != null) print("🔢 OTP: $otpCode");
+      if (qrData != null) print("📱 QR Data: Provided");
+      print("🌐 URL: $securityBaseUrl/visitors/approve/$guardId");
+
+      final url = Uri.parse("$securityBaseUrl/visitors/approve/$guardId");
+      final requestBody = <String, dynamic>{};
+
+      // Either use visitorId + otpCode OR qrData
+      if (qrData != null) {
+        requestBody["qrData"] = qrData;
+      } else if (visitorId != null && otpCode != null) {
+        requestBody["visitorId"] = visitorId;
+        requestBody["otpCode"] = otpCode;
+      } else {
+        throw Exception(
+          "Either qrData or both visitorId and otpCode must be provided",
+        );
+      }
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(requestBody),
+      );
+
+      print("📱 Approve Visitor Response Status: ${response.statusCode}");
+      print("📱 Approve Visitor Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Visitor approved successfully!");
+        return {
+          "success": true,
+          "message": body["message"] ?? "Visitor approved successfully",
+          "data": body["data"] ?? {},
+        };
+      } else {
+        print("❌ Approve visitor failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to approve visitor");
+      }
+    } catch (e) {
+      print("🔥 Error approving visitor: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to approve visitor: $e");
+    }
+  }
+
+  /// Reject a visitor (requires login credentials)
+  static Future<Map<String, dynamic>> rejectVisitor({
+    required String visitorId,
+    required String mobileNumber,
+    required String password,
+  }) async {
+    try {
+      print("❌ Rejecting visitor: $visitorId");
+      print("📱 Mobile: $mobileNumber");
+      print("🌐 URL: $visitorsBaseUrl/approve");
+
+      // Note: Using the same approve endpoint for rejection
+      // The backend handles rejection logic internally
+      final url = Uri.parse("$visitorsBaseUrl/approve");
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "visitorId": visitorId,
+          "mobilenumber": mobileNumber,
+          "password": password,
+          "action": "reject", // Indicate this is a rejection action
+        }),
+      );
+
+      print("📱 Reject Visitor Response Status: ${response.statusCode}");
+      print("📱 Reject Visitor Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Visitor rejected successfully!");
+        return {
+          "success": true,
+          "message": body["message"] ?? "Visitor rejected successfully",
+        };
+      } else {
+        print("❌ Reject visitor failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to reject visitor");
+      }
+    } catch (e) {
+      print("🔥 Error rejecting visitor: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to reject visitor: $e");
+    }
+  }
+
+  /// Get Pending Visitors for Security Guard
+  static Future<Map<String, dynamic>> getPendingVisitors({
+    required String guardId,
+    int limit = 1000,
+  }) async {
+    try {
+      debugPrint('🔍 Getting pending visitors for guard: $guardId');
+
+      final response = await http.get(
+        Uri.parse('${securityBaseUrl}/visitors/$guardId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      debugPrint(
+        '📱 Get Pending Visitors Response Status: ${response.statusCode}',
+      );
+      debugPrint('📱 Get Pending Visitors Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data;
+      } else {
+        throw Exception(
+          'Failed to fetch pending visitors: ${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching pending visitors: $e');
+      throw Exception('Failed to fetch pending visitors: $e');
+    }
+  }
+
+  /// Get visitor by QR code (for validation before approval)
+  static Future<Map<String, dynamic>> getVisitorByQRCode({
+    required String qrData,
+    required String mobileNumber,
+    required String password,
+  }) async {
+    try {
+      print("🔍 Validating visitor by QR code");
+      print("📱 Mobile: $mobileNumber");
+      print("🌐 URL: $visitorsBaseUrl/approve");
+
+      // Use the approve endpoint to validate QR code and get visitor data
+      final url = Uri.parse("$visitorsBaseUrl/approve");
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "qrData": qrData,
+          "mobilenumber": mobileNumber,
+          "password": password,
+          "validateOnly":
+              true, // Flag to indicate we only want validation, not approval
+        }),
+      );
+
+      print("📱 Get Visitor by QR Response Status: ${response.statusCode}");
+      print("📱 Get Visitor by QR Response Body: ${response.body}");
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && body["success"] == true) {
+        print("✅ Visitor validated by QR code!");
+        return {
+          "success": true,
+          "message": body["message"] ?? "Visitor found",
+          "data": body["data"],
+        };
+      } else if (response.statusCode == 404 ||
+          body["message"]?.contains("not found") == true) {
+        print("❌ Visitor not found for QR code");
+        return {
+          "success": false,
+          "message": "Visitor not found for this QR code",
+        };
+      } else {
+        print("❌ Get visitor by QR failed: ${body["message"]}");
+        throw Exception(body["message"] ?? "Failed to validate QR code");
+      }
+    } catch (e) {
+      print("🔥 Error validating QR code: $e");
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Failed host lookup')) {
+        throw Exception(
+          "❌ Cannot connect to server. Please ensure your backend server is running on http://localhost:8080",
+        );
+      }
+      throw Exception("Failed to validate QR code: $e");
+    }
+  }
 }
