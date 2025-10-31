@@ -134,7 +134,7 @@ class _ShowDonationsPageState extends State<ShowDonationsPage> {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        if (responseData['success'] == true) {
+        if (responseData['status'] == true) {
           final donationsData = responseData['data'] as List<dynamic>;
           final loadedDonations = donationsData
               .map((json) => Donation.fromJson(json))

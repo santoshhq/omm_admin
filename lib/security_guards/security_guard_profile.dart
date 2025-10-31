@@ -440,17 +440,29 @@ class _SecurityGuardProfilePageState extends State<SecurityGuardProfilePage> {
 
   Future<void> _performLogout() async {
     try {
+      print('🔐 Starting security guard logout process...');
+
       // Perform logout
+      print('📤 Calling SecurityGuardAuthService.logout()...');
       await SecurityGuardAuthService.logout();
+      print('✅ SecurityGuardAuthService.logout() completed successfully');
 
       // Navigate back to login screen and clear navigation stack
       if (mounted) {
+        print('🧭 Navigating to security guard login screen...');
         Navigator.of(context).pushNamedAndRemoveUntil(
-          '/security_guard_login', // Make sure this route is defined
+          '/security-login', // Make sure this route is defined
           (Route<dynamic> route) => false, // Remove all previous routes
         );
+        print('✅ Navigation to security guard login completed');
+      } else {
+        print('❌ Widget not mounted, cannot navigate');
       }
     } catch (e) {
+      print('❌ Logout failed with error: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      print('❌ Error stack trace: ${StackTrace.current}');
+
       // Show error if logout fails
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

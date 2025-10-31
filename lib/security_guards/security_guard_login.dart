@@ -262,7 +262,10 @@ class _SecurityGuardLoginPageState extends State<SecurityGuardLoginPage> {
               // Back to Admin Login
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/login', // Navigate to admin login page
+                    (Route<dynamic> route) => false, // Clear navigation stack
+                  );
                 },
                 child: const Text(
                   "Back to Admin Login",
