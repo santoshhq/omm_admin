@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omm_admin/security_guards/security_module.dart';
 import '../services/admin_session_service.dart';
+import '../services/security_guard_auth_service.dart';
 
 class ApiService {
   // Dynamic base URL based on platform
@@ -3502,8 +3503,18 @@ class ApiService {
       '$billRequestsBaseUrl/$requestId';
 
   // ==================== VISITOR MANAGEMENT APIs ====================
+  static String get visitorRequestsBaseUrl {
+    if (Platform.isAndroid) {
+      return "http://10.0.2.2:8080/api/visitors";
+    } else if (Platform.isIOS) {
+      return "http://localhost:8080/api/visitors";
+    } else {
+      return "http://localhost:8080/api/visitors";
+    }
+  }
 
-  /// Approve a visitor (requires login credentials)
+  /// Approve a visitor (requires JWT authentication)
+  /// Approve a visitor (requires JWT authentication)
   static Future<Map<String, dynamic>> approveVisitor({
     required String guardId,
     String? visitorId,
@@ -3512,13 +3523,17 @@ class ApiService {
   }) async {
     try {
       print("✅ Approving visitor");
-      print("� Guard ID: $guardId");
+      print("👤 Guard ID: $guardId");
       if (visitorId != null) print("🆔 Visitor ID: $visitorId");
       if (otpCode != null) print("🔢 OTP: $otpCode");
       if (qrData != null) print("📱 QR Data: Provided");
-      print("🌐 URL: $securityBaseUrl/visitors/approve/$guardId");
 
-      final url = Uri.parse("$securityBaseUrl/visitors/approve/$guardId");
+      // Get JWT token
+      final String? token = await SecurityGuardAuthService.getToken();
+      if (token == null) {
+        throw Exception('No authentication token found. Please login again.');
+      }
+
       final requestBody = <String, dynamic>{};
 
       // Either use visitorId + otpCode OR qrData
@@ -3533,9 +3548,14 @@ class ApiService {
         );
       }
 
+      // Use correct backend endpoint: POST /api/security/visitors/approve/:guardId
+      final url = Uri.parse("$securityBaseUrl/visitors/approve/$guardId");
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
         body: jsonEncode(requestBody),
       );
 
@@ -3544,7 +3564,8 @@ class ApiService {
 
       final body = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && body["success"] == true) {
+      // ✅ FIXED: Check "status" instead of "success"
+      if (response.statusCode == 200 && body["status"] == true) {
         print("✅ Visitor approved successfully!");
         return {
           "success": true,
@@ -3552,8 +3573,13 @@ class ApiService {
           "data": body["data"] ?? {},
         };
       } else {
-        print("❌ Approve visitor failed: ${body["message"]}");
-        throw Exception(body["message"] ?? "Failed to approve visitor");
+        print(
+          "❌ Approve visitor failed: ${body["message"] ?? body["error"] ?? "Unknown error"}",
+        );
+        // ✅ FIXED: Handle both "message" and potential "error" fields
+        throw Exception(
+          body["message"] ?? body["error"] ?? "Failed to approve visitor",
+        );
       }
     } catch (e) {
       print("🔥 Error approving visitor: $e");
@@ -3568,28 +3594,32 @@ class ApiService {
     }
   }
 
-  /// Reject a visitor (requires login credentials)
+  /// Reject a visitor (requires JWT authentication)
   static Future<Map<String, dynamic>> rejectVisitor({
     required String visitorId,
-    required String mobileNumber,
-    required String password,
+    required String guardId,
   }) async {
     try {
-      print("❌ Rejecting visitor: $visitorId");
-      print("📱 Mobile: $mobileNumber");
-      print("🌐 URL: $visitorsBaseUrl/approve");
+      print("❌ Rejecting visitor: $visitorId for guard: $guardId");
 
-      // Note: Using the same approve endpoint for rejection
-      // The backend handles rejection logic internally
-      final url = Uri.parse("$visitorsBaseUrl/approve");
+      // Get JWT token
+      final String? token = await SecurityGuardAuthService.getToken();
+      if (token == null) {
+        throw Exception('No authentication token found. Please login again.');
+      }
+
+      // Updated URL format: /api/visitors/{visitorId}/reject
+      final url = Uri.parse("$visitorRequestsBaseUrl/$visitorId/reject");
+      print("🌐 URL: $url");
+
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
         body: jsonEncode({
-          "visitorId": visitorId,
-          "mobilenumber": mobileNumber,
-          "password": password,
-          "action": "reject", // Indicate this is a rejection action
+          "guardId": guardId, // Include guardId in request body
         }),
       );
 
@@ -3603,6 +3633,7 @@ class ApiService {
         return {
           "success": true,
           "message": body["message"] ?? "Visitor rejected successfully",
+          "data": body["data"] ?? {}, // Include data field from response
         };
       } else {
         print("❌ Reject visitor failed: ${body["message"]}");
@@ -3621,35 +3652,312 @@ class ApiService {
     }
   }
 
-  /// Get Pending Visitors for Security Guard
-  static Future<Map<String, dynamic>> getPendingVisitors({
-    required String guardId,
-    int limit = 1000,
-  }) async {
+  static Future<List<dynamic>> getPendingVisitors(String guardId) async {
+    debugPrint('🚀 STARTING getPendingVisitors API call');
+    debugPrint('🔑 Guard ID: $guardId');
+
     try {
-      debugPrint('🔍 Getting pending visitors for guard: $guardId');
+      final String? token = await SecurityGuardAuthService.getToken();
+      debugPrint('🔐 Token available: ${token != null ? "YES" : "NO"}');
+
+      if (token == null) {
+        debugPrint('❌ No authentication token found - user not logged in');
+        throw Exception('No authentication token found');
+      }
+
+      final url = '$securityBaseUrl/visitors?guardId=$guardId';
+      debugPrint('🌐 Full URL: $url');
+      debugPrint('📡 Making GET request to fetch pending visitors...');
 
       final response = await http.get(
-        Uri.parse('${securityBaseUrl}/visitors/$guardId'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
 
-      debugPrint(
-        '📱 Get Pending Visitors Response Status: ${response.statusCode}',
-      );
-      debugPrint('📱 Get Pending Visitors Response Body: ${response.body}');
+      debugPrint('📨 HTTP Response Status: ${response.statusCode}');
+      debugPrint('📊 Response Headers: ${response.headers}');
+      debugPrint('📏 Response Body Length: ${response.body.length} characters');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data;
+      // Log response body safely (truncate if too long)
+      if (response.body.length < 1000) {
+        debugPrint('📨 Raw Response Body: ${response.body}');
       } else {
-        throw Exception(
-          'Failed to fetch pending visitors: ${response.statusCode} - ${response.body}',
+        debugPrint(
+          '📨 Response Body (truncated): ${response.body.substring(0, 500)}...',
         );
       }
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ HTTP 200 - Parsing JSON response...');
+
+        try {
+          final data = json.decode(response.body);
+          debugPrint('📋 Parsed JSON data type: ${data.runtimeType}');
+          debugPrint('📋 Raw parsed data: $data');
+
+          // Handle different response formats
+          List<dynamic> visitors = [];
+
+          if (data is List) {
+            // Backend returns array directly
+            debugPrint('📋 Backend returned List directly');
+            visitors = data;
+          } else if (data is Map) {
+            debugPrint('📋 Response keys: ${data.keys.toList()}');
+
+            // Check if data is wrapped in 'data' field
+            if (data.containsKey('data')) {
+              final dataField = data['data'];
+              if (dataField is List) {
+                visitors = dataField;
+                debugPrint(
+                  '👥 Visitors found in data field: ${visitors.length}',
+                );
+              } else {
+                debugPrint(
+                  '❌ data field is not a List, it is ${dataField.runtimeType}',
+                );
+                throw Exception(
+                  'Invalid response format: data field is not a List',
+                );
+              }
+            } else {
+              // Check if the response is an array of visitor objects directly
+              debugPrint(
+                '📋 No data field found, checking if response is array of visitors',
+              );
+              // This shouldn't happen for a Map response, but let's handle it
+              throw Exception(
+                'Invalid response format: expected data field with visitor array',
+              );
+            }
+          } else {
+            debugPrint('❌ Unexpected response type: ${data.runtimeType}');
+            throw Exception(
+              'Invalid response format: expected JSON object or array',
+            );
+          }
+
+          debugPrint('👥 Final visitors count: ${visitors.length}');
+
+          if (visitors.isNotEmpty) {
+            debugPrint('� First visitor sample: ${visitors.first}');
+          }
+
+          debugPrint(
+            '✅ Successfully parsed ${visitors.length} pending visitors',
+          );
+          return visitors;
+        } catch (parseError) {
+          debugPrint('❌ JSON parsing failed: $parseError');
+          debugPrint('🔍 Raw response that failed to parse: ${response.body}');
+          throw Exception(
+            'Failed to parse server response as JSON: $parseError',
+          );
+        }
+      } else {
+        debugPrint('❌ HTTP ${response.statusCode} - Request failed');
+
+        // Specific error handling based on status code
+        if (response.statusCode == 401) {
+          debugPrint('🔐 401 Unauthorized - Token might be expired or invalid');
+          throw Exception('Authentication failed: Invalid or expired token');
+        } else if (response.statusCode == 403) {
+          debugPrint(
+            '🚫 403 Forbidden - User does not have permission to view visitors',
+          );
+          throw Exception('Access denied: Insufficient permissions');
+        } else if (response.statusCode == 404) {
+          debugPrint(
+            '🔍 404 Not Found - Guard ID not found or no visitors endpoint',
+          );
+          throw Exception('Resource not found: Invalid guard ID or endpoint');
+        } else if (response.statusCode >= 500) {
+          debugPrint('🖥️ ${response.statusCode} Server Error - Backend issue');
+          throw Exception('Server error: Please try again later');
+        } else {
+          debugPrint('❓ Unexpected status code: ${response.statusCode}');
+          throw Exception(
+            'Failed to fetch pending visitors: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
     } catch (e) {
-      debugPrint('❌ Error fetching pending visitors: $e');
-      throw Exception('Failed to fetch pending visitors: $e');
+      debugPrint('💥 EXCEPTION in getPendingVisitors: $e');
+      debugPrint('🔍 Error type: ${e.runtimeType}');
+      debugPrint('🔍 Error message: ${e.toString()}');
+
+      // Specific error type handling
+      if (e is FormatException) {
+        debugPrint('❌ FormatException: Invalid JSON format in response');
+      } else if (e.toString().contains('SocketException')) {
+        debugPrint('🌐 SocketException: Network connection failed');
+        debugPrint(
+          '💡 Check: Is the backend server running on the correct port?',
+        );
+      } else if (e.toString().contains('TimeoutException')) {
+        debugPrint('⏰ TimeoutException: Request timed out');
+        debugPrint(
+          '💡 Check: Is the server responding slowly or is there a network issue?',
+        );
+      } else if (e.toString().contains('HandshakeException')) {
+        debugPrint('🔒 HandshakeException: SSL/TLS certificate issue');
+      }
+
+      debugPrint('❌ Error in getPendingVisitors: $e');
+      rethrow;
+    }
+  }
+
+  /// Get expired visitors for a guard (requires JWT authentication)
+  static Future<List<dynamic>> getExpiredVisitors(String guardId) async {
+    debugPrint('🚀 STARTING getExpiredVisitors API call');
+    debugPrint('🔑 Guard ID: $guardId');
+
+    try {
+      // Get JWT token
+      final String? token = await SecurityGuardAuthService.getToken();
+      debugPrint('� Token available: ${token != null ? "YES" : "NO"}');
+
+      if (token == null) {
+        debugPrint('❌ No authentication token found - user not logged in');
+        throw Exception('No authentication token found. Please login again.');
+      }
+
+      // debugPrint(
+      // '� Mobile number available: ${mobileNumber != null ? 'YES' : 'NO'}',
+      //  );
+      // debugPrint('🔒 Password available: ${password != null ? 'YES' : 'NO'}');
+
+      final url = '$visitorsBaseUrl/guard/$guardId/expired';
+      debugPrint('🌐 Full URL: $url');
+      debugPrint('📡 Making GET request to fetch expired visitors...');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      debugPrint('📨 HTTP Response Status: ${response.statusCode}');
+      debugPrint('📊 Response Headers: ${response.headers}');
+      debugPrint('📏 Response Body Length: ${response.body.length} characters');
+
+      // Log response body safely (truncate if too long)
+      if (response.body.length < 1000) {
+        debugPrint('📨 Raw Response Body: ${response.body}');
+      } else {
+        debugPrint(
+          '📨 Response Body (truncated): ${response.body.substring(0, 500)}...',
+        );
+      }
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ HTTP 200 - Parsing JSON response...');
+
+        try {
+          final data = json.decode(response.body);
+          debugPrint('📋 Parsed JSON data type: ${data.runtimeType}');
+
+          if (data is Map) {
+            debugPrint('📋 Response keys: ${data.keys.toList()}');
+
+            // Check if the response has the expected structure
+            if (data['success'] == true) {
+              final visitors = data['data'] ?? [];
+              debugPrint('👥 Expired visitors found: ${visitors.length}');
+
+              if (visitors is List) {
+                debugPrint(
+                  '✅ Successfully parsed ${visitors.length} expired visitors',
+                );
+                return visitors;
+              } else {
+                debugPrint(
+                  '❌ Expected visitors to be a List, but got ${visitors.runtimeType}',
+                );
+                throw Exception(
+                  'Invalid response format: visitors is not a List',
+                );
+              }
+            } else {
+              debugPrint('❌ API returned success=false');
+              debugPrint(
+                '📝 Error message: ${data['message'] ?? 'Unknown error'}',
+              );
+              throw Exception(
+                data['message'] ?? 'Failed to fetch expired visitors',
+              );
+            }
+          } else {
+            debugPrint(
+              '❌ Expected response to be a Map, but got ${data.runtimeType}',
+            );
+            throw Exception('Invalid response format: expected JSON object');
+          }
+        } catch (parseError) {
+          debugPrint('❌ JSON parsing failed: $parseError');
+          debugPrint('🔍 Raw response that failed to parse: ${response.body}');
+          throw Exception(
+            'Failed to parse server response as JSON: $parseError',
+          );
+        }
+      } else {
+        debugPrint('❌ HTTP ${response.statusCode} - Request failed');
+
+        // Specific error handling based on status code
+        if (response.statusCode == 401) {
+          debugPrint('🔐 401 Unauthorized - Invalid credentials');
+          throw Exception('Authentication failed: Invalid credentials');
+        } else if (response.statusCode == 403) {
+          debugPrint(
+            '🚫 403 Forbidden - User does not have permission to view expired visitors',
+          );
+          throw Exception('Access denied: Insufficient permissions');
+        } else if (response.statusCode == 404) {
+          debugPrint(
+            '🔍 404 Not Found - Guard ID not found or expired visitors endpoint not available',
+          );
+          throw Exception('Resource not found: Invalid guard ID or endpoint');
+        } else if (response.statusCode >= 500) {
+          debugPrint('🖥️ ${response.statusCode} Server Error - Backend issue');
+          throw Exception('Server error: Please try again later');
+        } else {
+          debugPrint('❓ Unexpected status code: ${response.statusCode}');
+          throw Exception(
+            'Failed to fetch expired visitors: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('💥 EXCEPTION in getExpiredVisitors: $e');
+      debugPrint('🔍 Error type: ${e.runtimeType}');
+      debugPrint('🔍 Error message: ${e.toString()}');
+
+      // Specific error type handling
+      if (e is FormatException) {
+        debugPrint('❌ FormatException: Invalid JSON format in response');
+      } else if (e.toString().contains('SocketException')) {
+        debugPrint('🌐 SocketException: Network connection failed');
+        debugPrint(
+          '💡 Check: Is the backend server running on the correct port?',
+        );
+      } else if (e.toString().contains('TimeoutException')) {
+        debugPrint('⏰ TimeoutException: Request timed out');
+        debugPrint(
+          '💡 Check: Is the server responding slowly or is there a network issue?',
+        );
+      } else if (e.toString().contains('HandshakeException')) {
+        debugPrint('🔒 HandshakeException: SSL/TLS certificate issue');
+      }
+
+      debugPrint('❌ Error in getExpiredVisitors: $e');
+      rethrow;
     }
   }
 

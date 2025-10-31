@@ -4,6 +4,11 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+// Import routes
+const securityRouter = require('./backend/routers/securityguards.routers');
 
 const app = express();
 const server = http.createServer(app);
@@ -21,6 +26,9 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// API prefix
+const API_PREFIX = '/api';
+
 // MongoDB connection
 mongoose.connect('mongodb://localhost:27017/omm_admin', {
   useNewUrlParser: true,
@@ -28,6 +36,9 @@ mongoose.connect('mongodb://localhost:27017/omm_admin', {
 })
 .then(() => console.log('✅ MongoDB connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Routes
+app.use(`${API_PREFIX}/security`, securityRouter);
 
 // Basic route
 app.get('/', (req, res) => {
@@ -75,23 +86,48 @@ global.emitVisitorEvent = emitVisitorEvent;
 // Mock visitor data for testing
 let mockVisitors = [];
 
-// API Routes for visitors (mock implementation)
-app.get('/api/visitors', (req, res) => {
-  const guardId = req.query.guardId;
-  console.log(`📥 Getting visitors for guard: ${guardId}`);
+// Import middleware
+const { authenticateGuard, optionalAuthenticateGuard } = require('./backend/middleware/auth.middleware');
 
-  // Return mock visitors for now
-  res.json({
-    success: true,
-    data: mockVisitors,
-    count: mockVisitors.length,
-    message: 'Visitors retrieved successfully'
-  });
+// Mock visitor data for testing (will be replaced with database)
+app.get('/api/visitors/guard/:guardId', authenticateGuard, async (req, res) => {
+  try {
+    const { guardId } = req.params;
+
+    // Verify that the authenticated guard matches the requested guardId
+    if (req.guard.id !== guardId) {
+      return res.status(403).json({
+        status: false,
+        message: 'Access denied. You can only view your own visitors.'
+      });
+    }
+
+    console.log(`📥 Getting visitors for guard: ${guardId}`);
+
+    // For now, return mock visitors filtered by guard
+    // TODO: Replace with actual database query
+    const guardVisitors = mockVisitors.filter(visitor =>
+      visitor.assignedGuard === guardId || visitor.guardId === guardId
+    );
+
+    res.json({
+      status: true,
+      data: guardVisitors,
+      count: guardVisitors.length,
+      message: 'Visitors retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching visitors:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Error retrieving visitors'
+    });
+  }
 });
 
-app.post('/api/visitors', (req, res) => {
+app.post('/api/visitors', optionalAuthenticateGuard, (req, res) => {
   const visitorData = req.body;
-  const guardId = visitorData.guardId || visitorData.assignedGuard;
+  const guardId = visitorData.guardId || visitorData.assignedGuard || req.guard?.id;
 
   console.log('➕ New visitor request:', visitorData);
 
@@ -99,8 +135,11 @@ app.post('/api/visitors', (req, res) => {
   const newVisitor = {
     _id: Date.now().toString(),
     ...visitorData,
+    assignedGuard: guardId,
     createdAt: new Date().toISOString(),
-    status: 'pending'
+    status: 'pending',
+    // Set expiry to 24 hours from now (can be customized based on visitor type)
+    expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
   };
 
   mockVisitors.push(newVisitor);
@@ -109,19 +148,76 @@ app.post('/api/visitors', (req, res) => {
   emitVisitorEvent('visitorAdded', newVisitor, guardId);
 
   res.json({
-    success: true,
+    status: true,
     data: newVisitor,
     message: 'Visitor request created successfully'
   });
 });
 
-// Mock security guard login
+// Get expired visitors for a guard (requires JWT authentication)
+app.get('/api/visitors/guard/:guardId/expired', authenticateGuard, async (req, res) => {
+  try {
+    const { guardId } = req.params;
+
+    // Verify that the authenticated guard matches the requested guardId
+    if (req.guard.id !== guardId) {
+      return res.status(403).json({
+        status: false,
+        message: 'Access denied. You can only view your own expired visitors.'
+      });
+    }
+
+    console.log(`📅 Getting expired visitors for guard: ${guardId}`);
+
+    // Get current timestamp for expiry comparison
+    const now = new Date();
+
+    // For now, return mock visitors filtered by guard and expiry status
+    // TODO: Replace with actual database query
+    const expiredVisitors = mockVisitors.filter(visitor => {
+      // Check if visitor belongs to this guard
+      const visitorGuardId = visitor.assignedGuard || visitor.guardId;
+      if (visitorGuardId !== guardId) {
+        return false;
+      }
+
+      // Check if visitor has expiry information
+      if (!visitor.expiry) {
+        return false; // No expiry date means not expired
+      }
+
+      // Parse expiry date and check if it's expired
+      const expiryDate = new Date(visitor.expiry);
+      return expiryDate < now; // Expired if expiry date is before now
+    });
+
+    console.log(`📅 Found ${expiredVisitors.length} expired visitors for guard ${guardId}`);
+
+    res.json({
+      status: true,
+      data: expiredVisitors,
+      count: expiredVisitors.length,
+      message: 'Expired visitors retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching expired visitors:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Error retrieving expired visitors'
+    });
+  }
+});
+
+// Security guard login is now handled by /api/security/login route
+// This endpoint is kept for backward compatibility but should be removed in production
 app.post('/api/auth/login', (req, res) => {
+  console.log('⚠️  DEPRECATED: Using old login endpoint. Please use /api/security/login instead.');
+
   const { mobilenumber, password } = req.body;
 
   console.log(`🔐 Security guard login attempt: ${mobilenumber}`);
 
-  // Mock successful login
+  // Mock successful login for backward compatibility
   if (mobilenumber && password) {
     const guardData = {
       _id: 'guard_123',
@@ -135,7 +231,7 @@ app.post('/api/auth/login', (req, res) => {
 
     res.json({
       status: true,
-      message: 'Login successful',
+      message: 'Login successful (deprecated endpoint)',
       data: guardData,
       token: token
     });
